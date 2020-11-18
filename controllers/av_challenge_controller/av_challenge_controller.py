@@ -3,34 +3,47 @@
 
 # You may need to import some classes of the controller module. Ex:
 #  from controller import Robot, Motor, DistanceSensor
-from controller import Robot, Camera, Display
-import numpy as np
+from controller import Robot, Camera
 
 # create the Robot instance.
-robot = Robot()
+class TeslaBot(Robot):
+    def __init__(self):
+        super().__init__()
 
-# sensor setup
-front_camera = robot.getCamera("front_camera")
-rear_camera = robot.getCamera("rear_camera")
-lidar = robot.getLidar("Sick LMS 291")
+        # sensors
+        self.front_camera = self.getCamera("front_camera")
+        self.rear_camera  = self.getCamera("rear_camera")
+        self.lidar        = self.getLidar("Sick LMS 291")
 
-# actuators (motors & brakes) & corresponding position sensors
-l_motor = robot.getMotor("left_rear_wheel")
-r_motor = robot.getMotor("right_rear_wheel")
-l_motor_pos = robot.getPositionSensor("left_rear_sensor")
-r_motor_pos = robot.getPositionSensor("right_rear_sensor")
-l_brake = robot.getBrake("left_rear_brake")
-r_brake = robot.getBrake("right_rear_brake")
+        self.front_camera.enable(30)
+        self.rear_camera.enable(30)
+        self.lidar.enable(30)
+
+        self.l_motor_pos  = self.getPositionSensor("left_rear_sensor")
+        self.r_motor_pos  = self.getPositionSensor("right_rear_sensor")
+
+        self.l_steer_pos  = self.getPositionSensor("left_steer_sensor")
+        self.r_steer_pos  = self.getPositionSensor("right_steer_sensor")
+
+        # motors
+        self.l_motor = self.getMotor("left_rear_wheel")
+        self.r_motor = self.getMotor("right_rear_wheel")
+
+        # brakes
+        self.l_brake = self.getBrake("left_rear_brake")
+        self.r_brake = self.getBrake("right_rear_brake")
+
+        # steering
+        self.l_steer = self.getMotor("left_steer")
+        self.r_steer = self.getMotor("right_steer")
+
 
 # get the time step of the current world.
+robot = TeslaBot()
 timestep = int(robot.getBasicTimeStep())
 
-front_camera.enable(30)
-rear_camera.enable(30)
-lidar.enable(30)
-
-lidar_width = lidar.getHorizontalResolution()
-lidar_max_range = lidar.getMaxRange()
+# lidar_width = lidar.getHorizontalResolution()
+# lidar_max_range = lidar.getMaxRange()
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
@@ -42,7 +55,6 @@ while robot.step(timestep) != -1:
     # Process sensor data here.
 
     # Enter here functions to send actuator commands, like:
-    #  motor.setPosition(10.0)
     pass
 
 # Enter here exit cleanup code.
