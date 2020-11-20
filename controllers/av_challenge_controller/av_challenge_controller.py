@@ -42,9 +42,5 @@ while robot.step() != -1:
     lidar_data    = np.array(robot.lidar.getRangeImage())
 
     robot.setCruisingSpeed(10)
-    # # Process sensor data here.
-    print(robot.find_road_center(front_cam_img))
-
-    # Enter here functions to send actuator commands, like:
-
+    
 # Enter here exit cleanup code.
