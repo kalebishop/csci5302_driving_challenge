@@ -4,9 +4,12 @@
 # You may need to import some classes of the controller module. Ex:
 #  from controller import Robot, Motor, DistanceSensor
 from controller import Robot, Camera
+from vehicle import Driver
+import numpy as np
 
 # create the Robot instance.
-class TeslaBot(Robot):
+# See Webots Driver documentation: https://www.cyberbotics.com/doc/automobile/driver-library?tab-language=python
+class TeslaBot(Driver):
     def __init__(self):
         super().__init__()
 
@@ -19,42 +22,29 @@ class TeslaBot(Robot):
         self.rear_camera.enable(30)
         self.lidar.enable(30)
 
-        self.l_motor_pos  = self.getPositionSensor("left_rear_sensor")
-        self.r_motor_pos  = self.getPositionSensor("right_rear_sensor")
+        self.FOCAL_LENGTH = 117.4 # for default Webots 128 * 64 frontal cam
 
-        self.l_steer_pos  = self.getPositionSensor("left_steer_sensor")
-        self.r_steer_pos  = self.getPositionSensor("right_steer_sensor")
+    def calculate_front_offset(self, pixel_distance):
+        """ Estimate angle offset in radians from center given pixel width."""
+        return np.arctan(pixel_distance / self.FOCAL_LENGTH)
 
-        # motors
-        self.l_motor = self.getMotor("left_rear_wheel")
-        self.r_motor = self.getMotor("right_rear_wheel")
-
-        # brakes
-        self.l_brake = self.getBrake("left_rear_brake")
-        self.r_brake = self.getBrake("right_rear_brake")
-
-        # steering
-        self.l_steer = self.getMotor("left_steer")
-        self.r_steer = self.getMotor("right_steer")
-
-
-# get the time step of the current world.
 robot = TeslaBot()
-timestep = int(robot.getBasicTimeStep())
 
 # lidar_width = lidar.getHorizontalResolution()
 # lidar_max_range = lidar.getMaxRange()
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
-while robot.step(timestep) != -1:
+while robot.step() != -1:
     # Read the sensors:
-    # Enter here functions to read sensor data, like:
-    #  val = ds.getValue()
+    front_cam_img = np.array(robot.front_camera.getImageArray()) # returns image as 3D array
+    rear_cam_img  = np.array(robot.rear_camera.getImageArray())
+    lidar_data    = np.array(robot.lidar.getRangeImage())
 
-    # Process sensor data here.
+    robot.setCruisingSpeed(10)
+    # # Process sensor data here.
+    print(robot.find_road_center(front_cam_img))
 
     # Enter here functions to send actuator commands, like:
-    pass
 
 # Enter here exit cleanup code.
