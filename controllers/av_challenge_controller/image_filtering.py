@@ -25,14 +25,14 @@ class Detector:
                 k.size = max_size
                 kid = i
 
+        # cv2.imshow("im_with_keypoints", im_with_keypoints)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
         if kid >= 0:
             # draw the main target on the im_with_keypoints output image
             cv2.drawMarker(im_with_keypoints, (int(keypoints[kid].pt[0]), int(keypoints[kid].pt[1])), (0, 0, 255),
                            cv2.MARKER_CROSS, 100, 4)
 
-            cv2.imshow("im_with_keypoints", im_with_keypoints)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
 
             return keypoints[kid].pt
         return None
@@ -44,8 +44,8 @@ class Detector:
             :param higher_hue_value: max hue value
             :return: filtered image
         """
-        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        
+        hsv = cv2.cvtColor(img / 255.0, cv2.COLOR_RGB2HSV)
+        print(hsv[0, 0, :])
         maskHSV = cv2.inRange(hsv, self.lower_bound, self.upper_bound)
         return maskHSV
         # return hsv
@@ -58,7 +58,7 @@ class Detector:
         params = cv2.SimpleBlobDetector_Params()
 
         params.filterByArea = True
-        params.minArea = 10 # TODO: tweak
+        params.minArea = 3 # TODO: tweak
         params.maxArea = 40
 
         params.filterByColor = True

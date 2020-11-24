@@ -34,7 +34,7 @@ class TeslaBot(Driver):
 robot = TeslaBot()
 # lidar_width = lidar.getHorizontalResolution()
 # lidar_max_range = lidar.getMaxRange()
-road_line_detector = Detector(np.array([0, 0, 160]), np.array([255, 255, 255]))
+road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
@@ -44,8 +44,7 @@ while robot.step() != -1:
     rear_cam_img  = np.float32(robot.rear_camera.getImageArray())
     lidar_data    = np.array(robot.lidar.getRangeImage())
 
-    # robot.setCruisingSpeed(10)
+    robot.setCruisingSpeed(10)
     # print(robot.find_road_center(front_cam_img))
     print(road_line_detector.process_image(front_cam_img))
-    break
 # Enter here exit cleanup code.
