@@ -61,7 +61,13 @@ while robot.step() != -1:
         error = sum(road_line_points)/float(len(road_line_points)) - midpoint_y
         angle_error = robot.calculate_front_offset(error)
         control = line_follower.get_control(angle_error)
-        print(error, angle_error, control)
+        if abs(control) > 0.2:
+            robot.setBrakeIntensity(0.5)
+            robot.setCruisingSpeed(10)
+        else:
+            robot.setBrakeIntensity(0)
+            robot.setCruisingSpeed(max(30, lidar_data[int(len(lidar_data)/2)]-20))
+        print("steering angle: %f" % control)
         robot.setSteeringAngle(control)
 
 # Enter here exit cleanup code.
