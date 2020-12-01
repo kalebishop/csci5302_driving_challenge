@@ -7,30 +7,25 @@ class Detector:
         self.upper_bound = upper_bound
         self.lower_bound = lower_bound
 
-    def get_lines(self, img):
+    def get_lines(self, img, plot=False):
         """Use HoughLines algorithm to find white lines in the image.
             :param img: 3D rgb pixel numpy array
             :return: Array of four tuples where points (x1, y1) and (x2, y2) form
             a line. Ex. [(x1, y1, x2, y2) ... ]
         """
         filtered_image = self.filter_image(img)
-        # cv2.imshow("filtered image", filtered_image)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
         processed_image = cv2.Canny(filtered_image, threshold1=100, threshold2=200)
 
         lines = cv2.HoughLinesP(processed_image, 1, np.pi/180, 2)
         if lines is not None and len(lines) > 0:
-            for i in range(lines.shape[0]):
-                for coord in lines[i]:
-                    if coord[0] > 55 or coord[2] > 55:
+            if plot:
+                for i in range(lines.shape[0]):
+                    for coord in lines[i]:
                         cv2.line(img, (coord[0], coord[1]), (coord[2], coord[3]), (0, 0, 255), 1)
-                    else:
-                        cv2.line(img, (coord[0], coord[1]), (coord[2], coord[3]), (255, 0, 0), 1)
 
-            # cv2.imshow("lines", img)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
+                cv2.imshow("lines", img)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
             lines = lines.reshape(-1, 4)
         return lines
 
