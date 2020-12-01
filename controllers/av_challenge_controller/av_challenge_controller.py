@@ -8,6 +8,7 @@ from vehicle import Driver
 import numpy as np
 
 from image_filtering import Detector
+from simple_controller import PIDLineFollower
 
 # create the Robot instance.
 # See Webots Driver documentation: https://www.cyberbotics.com/doc/automobile/driver-library?tab-language=python
@@ -35,6 +36,12 @@ robot = TeslaBot()
 # lidar_width = lidar.getHorizontalResolution()
 # lidar_max_range = lidar.getMaxRange()
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
+line_follower = PIDLineFollower()
+
+# midpoint of y dimension from camera
+midpoint_y = robot.front_camera.getWidth() / 2.0
+
+robot.setCruisingSpeed(40)
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
@@ -44,7 +51,27 @@ while robot.step() != -1:
     rear_cam_img  = np.float32(robot.rear_camera.getImageArray())
     lidar_data    = np.array(robot.lidar.getRangeImage())
 
-    robot.setCruisingSpeed(10)
     # print(robot.find_road_center(front_cam_img))
-    print(road_line_detector.process_image(front_cam_img))
+    # get lines from camera image
+    lines = road_line_detector.get_lines(front_cam_img)
+    road_line_points = line_follower.get_road_lines(lines)
+
+    if len(road_line_points) > 0:
+        # find the error from the road line
+        error = sum(road_line_points)/float(len(road_line_points)) - midpoint_y
+        angle_error = robot.calculate_front_offset(error)
+        control = line_follower.get_control(angle_error)
+        if abs(control) > 0.2:
+            # brake and reduce speed when turning
+            robot.setBrakeIntensity(0.5)
+            robot.setCruisingSpeed(10)
+        else:
+            # remove braking
+            robot.setBrakeIntensity(0)
+            # set speed to 30 or lidar reading from center point - 20
+            # the max reading from center point is 80
+            robot.setCruisingSpeed(max(30, lidar_data[int(len(lidar_data)/2)]-20))
+        print("steering angle: %f" % control)
+        robot.setSteeringAngle(control)
+
 # Enter here exit cleanup code.
