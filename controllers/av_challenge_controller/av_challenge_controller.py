@@ -62,10 +62,14 @@ while robot.step() != -1:
         angle_error = robot.calculate_front_offset(error)
         control = line_follower.get_control(angle_error)
         if abs(control) > 0.2:
+            # brake and reduce speed when turning
             robot.setBrakeIntensity(0.5)
             robot.setCruisingSpeed(10)
         else:
+            # remove braking
             robot.setBrakeIntensity(0)
+            # set speed to 30 or lidar reading from center point - 20
+            # the max reading from center point is 80
             robot.setCruisingSpeed(max(30, lidar_data[int(len(lidar_data)/2)]-20))
         print("steering angle: %f" % control)
         robot.setSteeringAngle(control)

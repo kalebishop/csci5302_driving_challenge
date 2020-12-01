@@ -14,13 +14,16 @@ class Detector:
             a line. Ex. [(x1, y1, x2, y2) ... ]
         """
         filtered_image = self.filter_image(img)
+        # detect edges
         processed_image = cv2.Canny(filtered_image, threshold1=100, threshold2=200)
 
         lines = cv2.HoughLinesP(processed_image, 1, np.pi/180, 2)
         if lines is not None and len(lines) > 0:
             if plot:
+                img = img / 255.0
                 for i in range(lines.shape[0]):
                     for coord in lines[i]:
+                        # plot line in red in original image
                         cv2.line(img, (coord[0], coord[1]), (coord[2], coord[3]), (0, 0, 255), 1)
 
                 cv2.imshow("lines", img)
