@@ -5,9 +5,9 @@ DERIVATIVE_GAIN = 0.1
 
 class PIDLineFollower:
     def __init__(self):
-        self.error_history = [0]
+        self.prev_error = 0
 
-    def get_road_lines(self, lines, threshold=55):
+    def get_road_lines(self, lines, threshold=60):
         """Returns y coordinates of road lines. We want to return the y coordinate
         because that is the center of the road. Note that the image is rotated
         counter-clockwise by 90 degrees.
@@ -22,7 +22,7 @@ class PIDLineFollower:
             for coord in lines:
                 if coord[0] > threshold:
                     points.append(coord[1])
-                elif coord[2] > threshold:
+                if coord[2] > threshold:
                     points.append(coord[3])
         return points
 
@@ -32,8 +32,7 @@ class PIDLineFollower:
         :return: steering angle in radians (positive turns right, negative turns
         left)
         """
-        self.error_history.append(angle_error)
         control = (PROPORTIONAL_GAIN * angle_error) \
-                + (INTEGRAL_GAIN * sum(self.error_history[-5:])) \
-                + (DERIVATIVE_GAIN * (angle_error - self.error_history[-2]))
+                + (DERIVATIVE_GAIN * (angle_error - self.prev_error))
+        self.prev_error = angle_error
         return control
