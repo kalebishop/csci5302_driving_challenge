@@ -6,7 +6,9 @@
 from controller import Robot, Camera
 from vehicle import Driver
 import numpy as np
+from visual_SLAM import fastSLAM
 
+import math
 from image_filtering import Detector
 from simple_controller import PIDLineFollower
 
@@ -18,6 +20,8 @@ class TeslaBot(Driver):
 
         # sensors
         self.front_camera = self.getCamera("front_camera")
+        self.front_camera.enable(64)
+        self.front_camera.recognitionEnable(64)
         self.rear_camera  = self.getCamera("rear_camera")
         self.lidar        = self.getLidar("Sick LMS 291")
 
@@ -33,6 +37,7 @@ class TeslaBot(Driver):
         return np.arctan(pixel_distance / self.FOCAL_LENGTH)
 
 robot = TeslaBot()
+fSLAM = fastSLAM()
 # lidar_width = lidar.getHorizontalResolution()
 # lidar_max_range = lidar.getMaxRange()
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
@@ -40,6 +45,8 @@ line_follower = PIDLineFollower()
 
 # midpoint of y dimension from camera
 midpoint_y = robot.front_camera.getWidth() / 2.0
+# print(robot.getCurrentPosition())
+
 
 robot.setCruisingSpeed(40)
 
@@ -73,5 +80,19 @@ while robot.step() != -1:
             robot.setCruisingSpeed(max(30, lidar_data[int(len(lidar_data)/2)]-20))
         print("steering angle: %f" % control)
         robot.setSteeringAngle(control)
+
+    # Get camera objects for visualSLAM
+    visual_landmarks_front = robot.front_camera.getRecognitionObjects()
+    # visual_landmarks_back = robot.rear_camera.getRecognitionObjects()
+    # print(visual_landmarks_front, visual_landmarks_back)
+    visual_landmarks = visual_landmarks_front #+ visual_landmarks_back
+
+    curr_speed = robot.getCurrentSpeed()
+    curr_speed = curr_speed if not math.isnan(curr_speed) else 0
+    curr_angle = robot.getSteeringAngle()
+    curr_angle = curr_angle if not math.isnan(curr_angle) else 0
+
+    action = (curr_speed, curr_angle)
+    fSLAM.next_state(visual_landmarks, action)
 
 # Enter here exit cleanup code.
