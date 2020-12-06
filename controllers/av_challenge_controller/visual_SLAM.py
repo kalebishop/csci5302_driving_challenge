@@ -1,3 +1,4 @@
+from copy import deepcopy
 import numpy as np
 from math import *
 import matplotlib.pyplot as plt
@@ -11,7 +12,12 @@ class Landmark:
         """
         self.id = id
         self.mu = mu if mu is not None else np.zeros(2)
-        self.Sigma = Sigma if Sigma is not None else np.full((2, 2), float('inf'))
+        if Sigma is not None:
+            self.Sigma = Sigma
+        elif mu is None:
+            self.Sigma = np.full((2, 2), float('inf'))
+        else:
+            self.Sigma = np.full((2, 2), 10.)
 
 
 class Particle:
@@ -41,12 +47,22 @@ class fastSLAM:
 
     def __init__(self):
         self.N = 10  # max number of particles
-        self.new_mu_sigma = 1  # TODO adjust
+        self.new_pos_sigma = 0.1  # TODO adjust
+        self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.9
         self.Xs = []
         self.Ys = []
         self.particles = [Particle()]
         self.resample_particles()
+
+        # Initialize measurement covariance
+        # TODO tune
+        self.Q = np.array([[0.8, 0],
+                           [0, 0.8]])
+
+        self.axle_length = 4.792  # in meters; needed for motion model
+        # milliseconds between updates to the world in simulation
+        self.worldinfo_basic_timestep = 10
 
     def motion_model(self, x, u):
         """
@@ -56,18 +72,28 @@ class fastSLAM:
         :param u: action, expects it in the for (u_speed, u_change_in_steering_angle)
         :return: g(x, u) and G
         """
-        # Below is adapted from slide deck 33, slides 16 and 20
         x, y, theta = x
         us, ua = u  # speed and angle change
-        xp = x + us * (-sin(theta) + sin(theta + ua))
-        yp = y + us * (cos(theta) + -cos(theta + ua))
-        thetap = theta + ua
+
+        # convert speed from km/hour to meters/(WorldInfo.basicTimeStep * msec)
+        us = us * 1000 / 3600000. * self.worldinfo_basic_timestep
+
+        # Add noise
+        # us += np.random.normal(loc=0, scale=0.1) # TODO tune variance
+        # ua += np.random.normal(loc=0, scale=(pi / 32.))
+
+        # KB: the below version is taken from this site recommended
+        # by Brad for car mechanics: http://planning.cs.uiuc.edu/node658.html
+        xp = us * cos(theta)
+        yp = us * sin(theta)
+        # self.axle length is distance btw axles
+        thetap = us / self.axle_length * tan(ua)
 
         # G = np.eye(3)
         # G[0][2] = us * (-cos(theta) + cos(theta + ua))
         # G[0][1] = us * (-sin(theta) + sin(theta + ua))
 
-        return np.array([xp, yp, thetap]) #, G
+        return np.array([x + xp, y + yp, theta + thetap])  # , G
 
     def process_landmarks(self, zt):
         """
@@ -82,6 +108,23 @@ class fastSLAM:
             landmarks.append((object.get_id(), object.get_position()))
         return landmarks
 
+        # TODO test
+        # h = [] # predicted measurement observations
+        # H = [] # jacobians of observation function
+
+        # for j in zt:
+        #   delta = j.mu - x[:2]
+        #   r_pred = np.linalg.norm(delta)
+        #   phi_pred = np.arctan(2 * delta[1] / delta[0]) - x[2]
+        #   h.append((r_pred, phi_pred))
+
+        #   # calculate Jacobian H
+        #   H.append(np.array([[-1 * r_pred * delta[0], -1 * r_pred * delta[1], 0,           r_pred * delta[0], r_pred * delta[1]],
+        #                     [delta[1],               -1 * delta[0]           -1 * r_pred, -1 * delta[1],     delta[0]]]))
+        #   # TODO: H might need to be mapped into a higher dim space
+
+        # return h, H
+
     def get_landmarks(self, p, zt):
         """
         Associate landmarks visible in observation zt with landmarks of particle k.
@@ -90,53 +133,27 @@ class fastSLAM:
         :param zt: observations
         :return: list of associated landmarks
         """
-        #TODO define better threshold
-        # threshold = 10
-
-        # might be useful later if we need to do data association using distances
-        # v_to_p = {}
-        # p_to_v = {}
-        #
-        # js = []
-        # distances = np.zeros((len(zt), len(p.landmarks)))
-        # # visual landmarks
-        # for i, v_landmark in enumerate(zt):
-        #     v_landmark = np.array(v_landmark[:2]) + p.mu[:2]
-        #     # If there's no landmarks which it could map to, it's a new landmark
-        #     if len(p.landmarks) - len(v_to_p) <= 0:
-        #         js.append((v_landmark, None))
-        #         continue
-        #
-        #
-        #     # predicted landmarks
-        #     for k, p_landmark in enumerate(p.landmarks):
-        #         distances[i, k] = np.linalg.norm(v_landmark - p_landmark.mu)
-        #
-        #     # for visual landmark i, find closest particle landmark k
-        #     closest = np.argmin(distances[i])
-        #
-        #     # if distance to nearest is greater than threshold, it's a new landmark
-        #     if distances[i, closest] > threshold:
-        #         js.append((v_landmark, None))
-        #         continue
-        #
-        #     # Another landmark has already paired with the closest landmark
-        #     if closest in p_to_v:
-        #         # Deal with this later if it becomes an issue
-        #         print("Ugh got to deal with this")
-        #     else:
-        #         js.append((v_landmark, p.landmarks[closest]))
-        #         v_to_p[i] = closest
-        #         p_to_v[closest] = i
-        #         continue
-
         js = []
         for v_landmark in zt:
             id_, pos = v_landmark
-            pos = np.array(pos[:2]) + p.mu[:2]
+
+            current_angle = p.mu[2]
+
+            # Camera y dimension is the vertical dimension, and therefore not used
+            cam_x = pos[0]
+            cam_z = pos[2]
+
+            # line up the camera z axis (distance away from car) with the global x axis
+            global_x = cos(current_angle) * cam_z + sin(current_angle) * cam_x
+            # line up the camera x axis (distance away from car) with the global y axis
+            global_y = sin(current_angle) * cam_z + cos(current_angle) * cam_x
+
+            pos = np.array(pos[:2]) + np.array([global_x, global_y])
+
             for p_landmark in p.landmarks:
                 if id_ == p_landmark.id:
                     js.append((pos, p_landmark))
+                    # print(f"x,y prediction diff: ({pos[0] - p_landmark.mu[0]:.3f}, {pos[0] - p_landmark.mu[0]:.3f})") #landmark relative pos: {pos}, current particle pos: {p.mu}")
                     break
             else:
                 js.append((pos, id_))
@@ -146,19 +163,30 @@ class fastSLAM:
     def EKF_Update(self, j, l):
         """
         Apply EKF update to landmark l of particle p using visual landmark j
+
+        In final version:
+        :param h_i: predicted observation for landmark j (from self.motion_model)
+        :param H_i: Jacobian for landmark j (from self.motion_model)
+        :param z:   Observation vector for landmark j (vertical vector of range r, angle phi)
         """
-        # landmark = j.landmarks[k]
-        # z_t_pred, H = self.observation_model(j.mu, xt)
-        H = np.ones((2,2))
-        self.Q = np.ones((2,2))
+
+        H = np.ones((2, 2))
 
         Q = np.matmul(np.matmul(H, l.Sigma), H.transpose()) + self.Q
         # print(Q)
-        K = np.matmul(np.matmul(l.Sigma, H), np.linalg.pinv(Q))  # Kalman gain # TODO using pseudo inverse of Q because otherwise getting singular matrices -- not sure what that's about
+        K = np.matmul(np.matmul(l.Sigma, H),
+                      np.linalg.inv(Q))  # Kalman gain # KB: trying to use regular inverse again after fixing Q
         l.mu = l.mu + np.matmul(K, (j - l.mu))
-        l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma) # TODO @Kaleb was there a reason you used 4 originally?
+        l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma)
 
-        weight = np.linalg.norm(Q) ** (-0.5) * np.exp(-0.5 * np.matmul(np.matmul((j - l.mu).T, np.linalg.pinv(Q)), (j - l.mu)))
+        # KB - alt version for when we're ready to test without location cheat -
+        # TODO add appropriate results h & H from self.motion_model to params,
+        # with corresponding observation z
+        # l.mu = l.mu + np.matmul(K, (z - h_i))
+        # l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H_i)), l.Sigma)
+
+        weight = np.linalg.norm(Q) ** (-0.5) * np.exp(
+            -0.5 * np.matmul(np.matmul((j - l.mu).T, np.linalg.inv(Q)), (j - l.mu)))
 
         return weight
 
@@ -191,15 +219,12 @@ class fastSLAM:
         # Step 2 fill the rest up with new samples
         required_new_particles = self.N - len(new_particles)
         for i in range(required_new_particles):
+            # As per Brad's answer, particles should just be copied, noise should come from motion model
             old_p = np.random.choice(new_particles)
-            new_mu = old_p.mu + np.random.normal(self.new_mu_sigma, size=3)
-            new_p = Particle(new_mu)
-            for lm in old_p.landmarks:  # TODO can probably be more efficient
-                mu = lm.mu + np.random.normal(self.new_mu_sigma, size=2)
-                Sigma = lm.Sigma + np.random.normal(self.new_mu_sigma, size=(2, 2))
-                new_p.add_landmark(lm.id, mu, Sigma)
-
-            new_particles.append(new_p)
+            new_mu = old_p.mu
+            new_mu[:2] += np.random.normal(0, self.new_pos_sigma, size=2)
+            new_mu[2] += np.random.normal(0, self.new_theta_sigma)
+            new_particles.append(Particle(deepcopy(new_mu), deepcopy(old_p.landmarks)))
 
         assert len(new_particles) == self.N
         self.particles = new_particles
@@ -217,7 +242,6 @@ class fastSLAM:
         """
         # Assumes visible landmarks is a list of landmarks
         # Specifically, a list of (x, y) tuples indicating the distance between the current position and the landmark
-        # TODO Currently cheating
         visible_landmarks = self.process_landmarks(zt)
 
         # For each particle
@@ -235,8 +259,9 @@ class fastSLAM:
 
             for j in js:
                 if isinstance(j[1], int):
-                    new_landmark_mu = p.mu[:2] + j[0] # replace with p.mu[:2] + j[0] when we fix visual cheat
-                    new_landmark_Sigma = np.full((2,2), 5) # TODO redefine 5 (which is just arbitrary covariance matrix value for new landmarks)
+                    new_landmark_mu = j[0]
+                    new_landmark_Sigma = np.full((2, 2),
+                                                 5)  # TODO redefine 5 (which is just arbitrary covariance matrix value for new landmarks)
                     p.add_landmark(j[1], new_landmark_mu, new_landmark_Sigma)
                     w_k_j = self.new_landmark_weight
                 else:
@@ -244,15 +269,14 @@ class fastSLAM:
                 w_k.append(w_k_j)
 
             if len(w_k) > 0:
-                w_k = np.power(np.prod(w_k), 1. / len(w_k)) # take n_th root of the product of the probabilities
+                w_k = np.power(np.prod(w_k), 1. / len(w_k))  # take n_th root of the product of the probabilities
                 p.update_weight(w_k)
 
         self.resample_particles()
 
         if len(self.Xs) % 500 == 0:
-            print('yipee')
             fig = plt.figure()
-            plt.plot(self.Xs, self.Ys)
+            plt.plot(self.Xs[::10], self.Ys[::10])
             fig.savefig(f'iter_{len(self.Xs)}.png', dpi=fig.dpi)
             # plt.show()
 
