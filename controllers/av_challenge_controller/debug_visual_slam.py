@@ -94,9 +94,11 @@ class fastSLAM:
         h = (r_pred, phi_pred)
 
         # calculate Jacobian H
-        H = (np.array([[-1 * r_pred * delta[0], -1 * r_pred * delta[1], 0,           r_pred * delta[0], r_pred * delta[1]],
-                        [delta[1],               -1 * delta[0]           -1 * r_pred, -1 * delta[1],     delta[0]]]))
+        H = np.array([[-1 * r_pred * delta[0], -1 * r_pred * delta[1], 0,           r_pred * delta[0], r_pred * delta[1]],
+                        [delta[1],               -1 * delta[0],           -1 * r_pred, -1 * delta[1],     delta[0]]])
         # TODO: H might need to be mapped into a higher dim space
+        H /= r_pred
+        print(H.shape)
         return h, H
 
     def inverse_observation_model(self, xt, z):
@@ -137,9 +139,9 @@ class fastSLAM:
             js.append((id_, r, phi))
         return js
 
-    def EKF_Initialize(self, xt, zt):
+    def EKF_Initialize(self, idx, xt, zt):
         # instantiate new landmark
-        new_landmark = Landmark()
+        new_landmark = Landmark(idx)
         new_landmark.mu = self.inverse_observation_model(xt, zt)
         h, H = self.observation_model(xt, new_landmark)
         new_landmark.Sigma = np.linalg.inv(H) * self.Q * (np.linalg.inv(H)).transpose()
@@ -241,8 +243,7 @@ class fastSLAM:
 
                 if not landmark_is_known:
                     w_k_j = self.new_landmark_weight
-                    new_landmark = self.EKF_Initialize(p.mu, (r, phi))
-                    new_landmark.id = id_
+                    new_landmark = self.EKF_Initialize(id_, p.mu, (r, phi))
                     p.landmarks.append(new_landmark)
                 w_k.append(w_k_j)
 
