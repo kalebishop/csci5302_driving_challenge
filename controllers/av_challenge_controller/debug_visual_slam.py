@@ -42,7 +42,7 @@ class fastSLAM:
     """
 
     def __init__(self):
-        self.N = 10  # max number of particles
+        self.N = 15  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.9
@@ -94,8 +94,9 @@ class fastSLAM:
         h = (r_pred, phi_pred)
 
         # calculate Jacobian H
-        H = (np.array([[-1 * r_pred * delta[0], -1 * r_pred * delta[1], 0,           r_pred * delta[0], r_pred * delta[1]],
-                        [delta[1],               -1 * delta[0]           -1 * r_pred, -1 * delta[1],     delta[0]]]))
+        H = np.array([[r_pred * delta[0],  r_pred * delta[1]],
+                      [- delta[1],     delta[0]]])
+
         # TODO: H might need to be mapped into a higher dim space
         return h, H
 
@@ -128,7 +129,7 @@ class fastSLAM:
             current_angle = p.mu[2]
 
             # Camera y dimension is the vertical dimension, and therefore not used
-            cam_x = pos[0]
+            cam_x = -pos[0]
             cam_z = pos[2]
 
             r = np.linalg.norm(np.array([cam_x, cam_z]))
@@ -137,9 +138,9 @@ class fastSLAM:
             js.append((id_, r, phi))
         return js
 
-    def EKF_Initialize(self, xt, zt):
+    def EKF_Initialize(self, id_, xt, zt):
         # instantiate new landmark
-        new_landmark = Landmark()
+        new_landmark = Landmark(id_)
         new_landmark.mu = self.inverse_observation_model(xt, zt)
         h, H = self.observation_model(xt, new_landmark)
         new_landmark.Sigma = np.linalg.inv(H) * self.Q * (np.linalg.inv(H)).transpose()
@@ -149,17 +150,26 @@ class fastSLAM:
         """
         Apply EKF update to landmark l of particle p using visual landmark j
         """
+        r, phi = j
+        j = np.array([r, phi])
+
         h, H = self.observation_model(xt, l)
 
         Q = np.matmul(np.matmul(H, l.Sigma), H.transpose()) + self.Q
         # print(Q)
+
+        # print(Q.shape, H.shape)
+
         K = np.matmul(np.matmul(l.Sigma, H),
                       np.linalg.inv(Q))  # Kalman gain # KB: trying to use regular inverse again after fixing Q
-        l.mu = l.mu + np.matmul(K, (j - l.mu))
+
+        l_prime = self.inverse_observation_model(xt, j)
+
+        l.mu = l.mu + np.matmul(K, l_prime - l.mu)
         l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma)
 
         weight = np.linalg.norm(Q) ** (-0.5) * np.exp(
-            -0.5 * np.matmul(np.matmul((j - l.mu).T, np.linalg.inv(Q)), (j - l.mu)))
+            -0.5 * np.matmul(np.matmul(l_prime.T, np.linalg.inv(Q)), l_prime))
 
         return weight
 
@@ -174,10 +184,11 @@ class fastSLAM:
 
         assert len(self.particles) > 0
 
+
         # Step 1 keep good samples
         for particle in self.particles:
             # Find best particle
-            if particle.weight > best_weight:
+            if particle.weight > best_weight or best_particle is None:
                 best_particle, best_weight = particle, particle.weight
             # Keep particles randomly based on their weight
             if np.random.random() < particle.weight:
@@ -195,8 +206,8 @@ class fastSLAM:
             # As per Brad's answer, particles should just be copied, noise should come from motion model
             old_p = np.random.choice(new_particles)
             new_mu = old_p.mu
-            new_mu[:2] += np.random.normal(0, self.new_pos_sigma, size=2)
-            new_mu[2] += np.random.normal(0, self.new_theta_sigma)
+            # new_mu[:2] += np.random.normal(0, self.new_pos_sigma, size=2)
+            # new_mu[2] += np.random.normal(0, self.new_theta_sigma)
             new_particles.append(Particle(deepcopy(new_mu), deepcopy(old_p.landmarks)))
 
         assert len(new_particles) == self.N
@@ -217,9 +228,9 @@ class fastSLAM:
         # Specifically, a list of (x, y) tuples indicating the distance between the current position and the landmark
         visible_landmarks = self.process_landmarks(zt)
 
-        w_k = []
         # For each particle
         for p in self.particles:
+            new_weight = []
             # Motion model update
             p.mu = self.motion_model(p.mu, ut)
 
@@ -231,24 +242,23 @@ class fastSLAM:
 
             for j_observed in js:
                 id_, r, phi = j_observed
-                landmark_is_known = False
 
                 for p_landmark in p.landmarks:
                     if id_ == p_landmark.id:
                         # landmark has been seen - make update
-                        w_k_j = self.EKF_Update(p.mu, (r, phi), p_landmark)
-                        landmark_is_known = True
-
-                if not landmark_is_known:
-                    w_k_j = self.new_landmark_weight
-                    new_landmark = self.EKF_Initialize(p.mu, (r, phi))
+                        w_j = self.EKF_Update(p.mu, (r, phi), p_landmark)
+                        break
+                else: # Landmark is unknown
+                    w_j = self.new_landmark_weight
+                    new_landmark = self.EKF_Initialize(id_, p.mu, (r, phi))
                     new_landmark.id = id_
                     p.landmarks.append(new_landmark)
-                w_k.append(w_k_j)
 
-            if len(w_k) > 0:
-                w_k = np.power(np.prod(w_k), 1. / len(w_k))  # take n_th root of the product of the probabilities
-                p.update_weight(w_k)
+                new_weight.append(w_j)
+
+            if len(new_weight) > 0:
+                new_weight = np.power(np.prod(new_weight), 1. / len(new_weight))  # take n_th root of the product of the probabilities
+                p.update_weight(new_weight)
 
         self.resample_particles()
 

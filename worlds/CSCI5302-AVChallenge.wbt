@@ -888,8 +888,10 @@ TeslaModel3 {
       ]
       # CHEATING
       recognition Recognition {
-       frameThickness 1
-       maxObjects 10
+       frameThickness 0
+       maxObjects 20
+       occlusion FALSE
+       maxRange 1000
       }
       ###
       name "front_camera"

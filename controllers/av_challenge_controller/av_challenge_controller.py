@@ -101,20 +101,20 @@ while robot.step() != -1:
             continue
         # if b'building' in obj_model: # ???
         #     continue
-        id = obj.get_id()
-        pos = obj.get_position()
-        ori = obj.get_orientation()
-        size = obj.get_size()
-        pos_on_img = obj.get_position_on_image()
-        size_on_img = obj.get_size_on_image()
-        nc = obj.get_number_of_colors()
-        cs = obj.get_colors()
-        model = obj.get_model()
+        # id = obj.get_id()
+        # pos = obj.get_position()
+        # ori = obj.get_orientation()
+        # size = obj.get_size()
+        # pos_on_img = obj.get_position_on_image()
+        # size_on_img = obj.get_size_on_image()
+        # nc = obj.get_number_of_colors()
+        # cs = obj.get_colors()
+        # model = obj.get_model()
         #
-        print(f"id: {id}, pos: {pos}, ori: {ori}, size: {size}\n"
-              f"pos_on_img: {pos_on_img}, size_on_img: {size_on_img}\n"
-              f"num_colours: {nc}, colours: {cs}\n"
-              f"model: {model}")
+        # print(f"id: {id}, pos: {pos}, ori: {ori}, size: {size}\n"
+        #       f"pos_on_img: {pos_on_img}, size_on_img: {size_on_img}\n"
+        #       f"num_colours: {nc}, colours: {cs}\n"
+        #       f"model: {model}")
         visual_landmarks.append(obj)
         # if obj.get_position_on_image()[0] > 100: # 100 is arbitrary
         #     visual_landmarks.append(obj)
