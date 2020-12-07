@@ -90,14 +90,16 @@ class fastSLAM:
     
         delta = j.mu - xt[:2]
         r_pred = np.linalg.norm(delta)
-        phi_pred = np.arctan(2 * delta[1] / delta[0]) - xt[2]
+        phi_pred = np.arctan2(delta[1], delta[0]) - xt[2]
         h = (r_pred, phi_pred)
 
         # calculate Jacobian H
         H = np.array([[r_pred * delta[0],  r_pred * delta[1]],
-                      [- delta[1],     delta[0]]])
+                      [- delta[1],         delta[0]]])
 
         # TODO: H might need to be mapped into a higher dim space
+        assert r_pred > 0
+        H = H / (r_pred ** 2)
         return h, H
 
     def inverse_observation_model(self, xt, z):
@@ -105,7 +107,7 @@ class fastSLAM:
         # delta_x, _, delta_z = z
         r, phi = z
         x, y, theta = xt
-        landmark_pos = np.array([x, y]) + np.array([r * np.cos(phi), r * np.sin(phi)])
+        landmark_pos = np.array([x, y]) + np.array([r * np.cos(phi + theta), r * np.sin(phi + theta)])
         return landmark_pos
 
     def process_landmarks(self, zt):
@@ -138,9 +140,9 @@ class fastSLAM:
             js.append((id_, r, phi))
         return js
 
-    def EKF_Initialize(self, id_, xt, zt):
+    def EKF_Initialize(self, idx, xt, zt):
         # instantiate new landmark
-        new_landmark = Landmark(id_)
+        new_landmark = Landmark(idx)
         new_landmark.mu = self.inverse_observation_model(xt, zt)
         h, H = self.observation_model(xt, new_landmark)
         new_landmark.Sigma = np.linalg.inv(H) * self.Q * (np.linalg.inv(H)).transpose()
@@ -155,20 +157,19 @@ class fastSLAM:
 
         h, H = self.observation_model(xt, l)
 
-        Q = np.matmul(np.matmul(H, l.Sigma), H.transpose()) + self.Q
+        Q = np.matmul(np.matmul(H, l.Sigma), H.T) + self.Q
         # print(Q)
 
         # print(Q.shape, H.shape)
 
-        K = np.matmul(np.matmul(l.Sigma, H),
-                      np.linalg.inv(Q))  # Kalman gain # KB: trying to use regular inverse again after fixing Q
+        K = np.matmul(np.matmul(l.Sigma, H.T), np.linalg.inv(Q))
 
         l_prime = self.inverse_observation_model(xt, j)
 
         l.mu = l.mu + np.matmul(K, l_prime - l.mu)
         l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma)
 
-        weight = np.linalg.norm(Q) ** (-0.5) * np.exp(
+        weight = (np.linalg.norm(2 * pi * Q) ** (-0.5)) * np.exp(
             -0.5 * np.matmul(np.matmul(l_prime.T, np.linalg.inv(Q)), l_prime))
 
         return weight
@@ -251,7 +252,6 @@ class fastSLAM:
                 else: # Landmark is unknown
                     w_j = self.new_landmark_weight
                     new_landmark = self.EKF_Initialize(id_, p.mu, (r, phi))
-                    new_landmark.id = id_
                     p.landmarks.append(new_landmark)
 
                 new_weight.append(w_j)
