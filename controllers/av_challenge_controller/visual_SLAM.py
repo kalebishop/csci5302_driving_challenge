@@ -23,7 +23,7 @@ class Particle:
 
         assert len(self.mu) == 3
         self.landmarks = landmarks if landmarks is not None else []
-        self.weight = 0.9  # TODO redefine
+        self.weight = 0.8  # TODO redefine
 
     def update_weight(self, new_weight):
         self.weight = new_weight
@@ -42,16 +42,16 @@ class fastSLAM:
         self.N = 50  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
-        self.new_landmark_weight = 0.9
+        self.new_landmark_weight = 0.8
         self.Xs = []
         self.Ys = []
         self.particles = [Particle()]
-        self.resample_particles()
+        self.resample_particles(1.)
 
         # Initialize measurement covariance
         # TODO tune
-        self.Q = np.array([[0.8, 0],
-                           [0, 0.8]])
+        self.Q = np.array([[3, 0],
+                           [0, 3]])
 
         self.axle_length = 3  # in meters; needed for motion model
         # milliseconds between updates to the world in simulation
@@ -78,7 +78,7 @@ class fastSLAM:
         # print(us, ua)
 
         # Add noise
-        us += np.random.normal(loc=0, scale=0.0001) # TODO tune variance
+        us += np.random.normal(loc=0, scale=0.001) # TODO tune variance
         ua += np.random.normal(loc=0, scale=(pi / 180.))
 
         # KB: the below version is taken from this site recommended
@@ -190,21 +190,25 @@ class fastSLAM:
         K = np.matmul(np.matmul(l.Sigma, H.T), np.linalg.inv(Q))
 
         l_prime = self.inverse_observation_model(xt, j)
+        diff = l_prime - l.mu
 
-        l.mu = l.mu + np.matmul(K, l_prime - l.mu)
+        l.mu = l.mu + np.matmul(K, diff)
         l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma)
 
         weight = (np.linalg.norm(2 * pi * Q) ** (-0.5)) * np.exp(
-            -0.5 * np.matmul(np.matmul(l_prime.T, np.linalg.inv(Q)), l_prime))
+            -0.5 * np.matmul(np.matmul(diff.T, np.linalg.inv(Q)), diff))
 
         return weight
 
-    def resample_particles(self):
+    def resample_particles(self, best_weight):
         """
         Only keep likely samples
         Add new likely and random samples
         NOTE: Should always restore the set of particles to a size of self.max_particles
         """
+        if best_weight == 0:
+            best_weight = 1.
+
         new_particles = []
         best_particle, best_weight = None, float('-inf')
 
@@ -217,17 +221,18 @@ class fastSLAM:
             if particle.weight > best_weight or best_particle is None:
                 best_particle, best_weight = particle, particle.weight
             # Keep particles randomly based on their weight
-            if np.random.random() < particle.weight:
+            # Normalize it so that the best particle has a 100% chance of being kept
+            if np.random.random() < (particle.weight / best_weight):
                 new_particles.append(particle)
 
-        if len(new_particles) < self.N:
+        if len(new_particles) == 0.:
             # Always keep best particle if it isn't already kept
             new_particles.append(best_particle)
 
         self.Xs.append(best_particle.mu[0])
         self.Ys.append(best_particle.mu[1])
         if len(self.Xs) % 100 == 0:
-            print(f"BEST WEIGHT: {best_weight}")
+            print(f"BEST WEIGHT: {best_weight}, particles kept: {len(new_particles)} / {self.N}")
 
         # Step 2 fill the rest up with new samples
         required_new_particles = self.N - len(new_particles)
@@ -254,6 +259,7 @@ class fastSLAM:
         :return:
         """
         visible_landmarks = zt
+        best_weight = 0.
 
         # For each particle
         for p in self.particles:
@@ -283,10 +289,13 @@ class fastSLAM:
                 new_weight.append(w_j)
 
             if len(new_weight) > 0:
-                new_weight = np.power(np.prod(new_weight), 1. / len(new_weight))  # take n_th root of the product of the probabilities
+                new_weight = np.mean(new_weight)  # take n_th root of the product of the probabilities
                 p.update_weight(new_weight)
 
-        self.resample_particles()
+            if p.weight > best_weight:
+                best_weight = p.weight
+
+        self.resample_particles(best_weight)
 
         if len(self.Xs) % 500 == 0:
             fig = plt.figure()
