@@ -42,7 +42,7 @@ class fastSLAM:
     """
 
     def __init__(self):
-        self.N = 15  # max number of particles
+        self.N = 50  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.9
@@ -56,7 +56,7 @@ class fastSLAM:
         self.Q = np.array([[0.8, 0],
                            [0, 0.8]])
 
-        self.axle_length = 3.0  # in meters; needed for motion model
+        self.axle_length = 3  # in meters; needed for motion model
         # milliseconds between updates to the world in simulation
         self.worldinfo_basic_timestep = 10
 
@@ -71,19 +71,28 @@ class fastSLAM:
         x, y, theta = x
         us, ua = u  # speed and angle change
 
+        # print(us, ua)
+
         # convert speed from km/hour to meters/(WorldInfo.basicTimeStep * msec)
-        us = us * 1000 / 3600000. * self.worldinfo_basic_timestep
+        us = us * (1000 / 3600000.) * self.worldinfo_basic_timestep
+
+        # us = us / 3.6
+
+        # print(us, ua)
 
         # Add noise
-        us += np.random.normal(loc=0, scale=0.1) # TODO tune variance
-        ua += np.random.normal(loc=0, scale=(pi / 32.))
+        us += np.random.normal(loc=0, scale=0.0001) # TODO tune variance
+        ua += np.random.normal(loc=0, scale=(pi / 180.))
 
         # KB: the below version is taken from this site recommended
         # by Brad for car mechanics: http://planning.cs.uiuc.edu/node658.html
         xp = us * cos(theta)
         yp = us * sin(theta)
         # self.axle length is distance btw axles
-        thetap = us / self.axle_length * tan(ua)
+        thetap = (us / self.axle_length) * tan(ua)
+
+        # print(f"from ({x:.2f}, {y:.2f}, {theta:.2f}) to ({x + xp:.2f}, {y + yp:.2f}, {theta + thetap:.2f})")
+
         return np.array([x + xp, y + yp, theta + thetap]) 
 
     def observation_model(self, xt, j):
@@ -131,11 +140,11 @@ class fastSLAM:
             current_angle = p.mu[2]
 
             # Camera y dimension is the vertical dimension, and therefore not used
-            cam_x = -pos[0]
-            cam_z = pos[2]
+            cam_x = pos[0]
+            cam_z = -pos[2]
 
             r = np.linalg.norm(np.array([cam_x, cam_z]))
-            phi = current_angle + np.arctan(cam_z / cam_x)
+            phi = current_angle + np.arctan2(cam_x, cam_z)
 
             js.append((id_, r, phi))
         return js
@@ -198,8 +207,11 @@ class fastSLAM:
         if len(new_particles) < self.N:
             # Always keep best particle if it isn't already kept
             new_particles.append(best_particle)
-            self.Xs.append(best_particle.mu[0])
-            self.Ys.append(best_particle.mu[1])
+
+        self.Xs.append(best_particle.mu[0])
+        self.Ys.append(best_particle.mu[1])
+        if len(self.Xs) % 100 == 0:
+            print(f"BEST WEIGHT: {best_weight}")
 
         # Step 2 fill the rest up with new samples
         required_new_particles = self.N - len(new_particles)
@@ -266,6 +278,7 @@ class fastSLAM:
             fig = plt.figure()
             plt.plot(self.Xs[::10], self.Ys[::10])
             fig.savefig(f'iter_{len(self.Xs)}.png', dpi=fig.dpi)
+            print(f"Saved plot to: iter_{len(self.Xs)}.png")
             # plt.show()
 
 

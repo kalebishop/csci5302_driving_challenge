@@ -4,6 +4,7 @@
 # You may need to import some classes of the controller module. Ex:
 #  from controller import Robot, Motor, DistanceSensor
 from controller import Robot, Camera, Supervisor
+from tqdm import tqdm
 from vehicle import Driver
 import numpy as np
 from debug_visual_slam import fastSLAM
@@ -21,13 +22,14 @@ class TeslaBot(Driver):
 
         # sensors
         self.front_camera = self.getCamera("front_camera")
-        self.front_camera.enable(8)
-        self.front_camera.recognitionEnable(8)
+        self.front_camera.enable(10)
+        self.front_camera.recognitionEnable(10)
         self.rear_camera = self.getCamera("rear_camera")
         self.lidar = self.getLidar("Sick LMS 291")
 
-        self.rear_camera.enable(8)
-        self.lidar.enable(8)
+        self.rear_camera.enable(10)
+        self.rear_camera.recognitionEnable(10)
+        self.lidar.enable(10)
 
         self.FOCAL_LENGTH = 117.4  # for default Webots 128 * 64 frontal cam
         self.CAM_WIDTH = 128
@@ -53,9 +55,16 @@ midpoint_y = robot.front_camera.getWidth() / 2.0
 
 robot.setCruisingSpeed(40)
 
+pbar = tqdm(total=10000)
+count = 0
+
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
+    count += 1
+    if count % 100 == 0:
+        print(f"Step count: {count}")
+    pbar.update(1)
     # Read the sensors:
     front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
     rear_cam_img = np.float32(robot.rear_camera.getImageArray())
@@ -87,10 +96,10 @@ while robot.step() != -1:
     visual_landmarks = []
     # Get camera objects for visualSLAM
     visual_landmarks_front = robot.front_camera.getRecognitionObjects()
-    # visual_landmarks_back = robot.rear_camera.getRecognitionObjects()
+    visual_landmarks_rear = robot.rear_camera.getRecognitionObjects()
     # print(visual_landmarks_front, visual_landmarks_back)
 
-    for obj in visual_landmarks_front:
+    for obj in visual_landmarks_front + visual_landmarks_rear:
         # ignore road, barriers and whatever twoers are
         obj_model = obj.get_model()
         if b'road' in obj_model:
@@ -119,7 +128,8 @@ while robot.step() != -1:
         # if obj.get_position_on_image()[0] > 100: # 100 is arbitrary
         #     visual_landmarks.append(obj)
 
-    # print("-" * 50)
+    if count % 25 == 0:
+        print(f"number of landmarks: {len(visual_landmarks)}")
     #
     # print(len(visual_landmarks_front), len(visual_landmarks))
     # visual_landmarks = visual_landmarks_front #+ visual_landmarks_back
@@ -134,3 +144,4 @@ while robot.step() != -1:
     fSLAM.next_state(visual_landmarks, action)
 
 # Enter here exit cleanup code.
+pbar.close()
