@@ -7,7 +7,7 @@ from controller import Robot, Camera, Supervisor
 from tqdm import tqdm
 from vehicle import Driver
 import numpy as np
-from debug_visual_slam import fastSLAM
+from visual_SLAM import fastSLAM
 
 import math
 from image_filtering import Detector
@@ -33,6 +33,9 @@ class TeslaBot(Driver):
 
         self.FOCAL_LENGTH = 117.4  # for default Webots 128 * 64 frontal cam
         self.CAM_WIDTH = 128
+
+        # distance in meters in -z axis betweeen rear camera and front camera
+        self.FRONT_CAMERA_OFFSET = -0.37
 
     def calculate_front_offset(self, pixel_distance):
         """ Estimate angle offset in radians from center given distance from center."""
@@ -97,9 +100,8 @@ while robot.step() != -1:
     # Get camera objects for visualSLAM
     visual_landmarks_front = robot.front_camera.getRecognitionObjects()
     visual_landmarks_rear = robot.rear_camera.getRecognitionObjects()
-    # print(visual_landmarks_front, visual_landmarks_back)
 
-    for obj in visual_landmarks_front + visual_landmarks_rear:
+    for obj in visual_landmarks_front:
         # ignore road, barriers and whatever twoers are
         obj_model = obj.get_model()
         if b'road' in obj_model:
@@ -119,14 +121,27 @@ while robot.step() != -1:
         # nc = obj.get_number_of_colors()
         # cs = obj.get_colors()
         # model = obj.get_model()
-        #
+        # #
         # print(f"id: {id}, pos: {pos}, ori: {ori}, size: {size}\n"
         #       f"pos_on_img: {pos_on_img}, size_on_img: {size_on_img}\n"
         #       f"num_colours: {nc}, colours: {cs}\n"
         #       f"model: {model}")
-        visual_landmarks.append(obj)
-        # if obj.get_position_on_image()[0] > 100: # 100 is arbitrary
-        #     visual_landmarks.append(obj)
+        visual_landmarks.append((obj.get_id(), obj.get_position()))
+
+    for obj in visual_landmarks_rear:
+        obj_model = obj.get_model()
+        if b'road' in obj_model:
+            continue
+        if b'crash barrier' in obj_model:
+            continue
+        if b'twoer' in obj_model:
+            continue
+        obj_pos = obj.get_position()
+        # change object position to the front camera's reference frame
+        obj_pos[2] += robot.FRONT_CAMERA_OFFSET
+        obj_pos[2] = -obj_pos[2]
+        obj_pos[0] = -obj_pos[0]
+        visual_landmarks.append((obj.get_id(), obj_pos))
 
     if count % 25 == 0:
         print(f"number of landmarks: {len(visual_landmarks)}")

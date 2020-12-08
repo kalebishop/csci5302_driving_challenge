@@ -244,7 +244,7 @@ class fastSLAM:
 
     def next_state(self, zt, ut):
         """
-        zt: observations at time t (list of CameraRecognitionObjects)
+        zt: observations at time t (a list of (x, y) tuples indicating the distance between the current position and the landmark)
         ut: action taken at time t (us, uphi)
 
         other things that are used:
@@ -253,9 +253,7 @@ class fastSLAM:
         g: Motion model --> self.motion_model in this class
         :return:
         """
-        # Assumes visible landmarks is a list of landmarks
-        # Specifically, a list of (x, y) tuples indicating the distance between the current position and the landmark
-        visible_landmarks = self.process_landmarks(zt)
+        visible_landmarks = zt
 
         # For each particle
         for p in self.particles:
