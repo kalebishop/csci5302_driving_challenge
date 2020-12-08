@@ -865,6 +865,13 @@ TeslaModel3 {
       name "rear_camera"
       fieldOfView 1
       width 128
+      # CHEATING
+      recognition Recognition {
+       frameThickness 0
+       maxObjects 100
+       occlusion FALSE
+       maxRange 10000
+      }
     }
   ]
   sensorsSlotTop [
@@ -888,8 +895,10 @@ TeslaModel3 {
       ]
       # CHEATING
       recognition Recognition {
-       frameThickness 1
-       maxObjects 10
+       frameThickness 0
+       maxObjects 100
+       occlusion FALSE
+       maxRange 10000
       }
       ###
       name "front_camera"
