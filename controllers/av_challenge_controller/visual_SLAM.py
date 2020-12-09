@@ -53,9 +53,16 @@ class fastSLAM:
         self.Q = np.array([[3, 0],
                            [0, 3]])
 
-        self.axle_length = 3  # in meters; needed for motion model
+        self.axle_length = 3.0  # in meters; needed for motion model
         # milliseconds between updates to the world in simulation
         self.worldinfo_basic_timestep = 10
+
+    def wrap_angle(self, angle):
+        """
+        Wrap angle to [-pi, pi]
+        :param angle: angle in radians
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def motion_model(self, x, u):
         """
@@ -66,6 +73,7 @@ class fastSLAM:
         :return: g(x, u)
         """
         x, y, theta = x
+        theta = self.wrap_angle(theta)
         us, ua = u  # speed and angle change
 
         # print(us, ua)
@@ -90,7 +98,7 @@ class fastSLAM:
 
         # print(f"from ({x:.2f}, {y:.2f}, {theta:.2f}) to ({x + xp:.2f}, {y + yp:.2f}, {theta + thetap:.2f})")
 
-        return np.array([x + xp, y + yp, theta + thetap]) 
+        return np.array([x + xp, y + yp, self.wrap_angle(theta + thetap)])
 
     def observation_model(self, xt, j):
         """
@@ -101,7 +109,8 @@ class fastSLAM:
         """
         delta = j.mu - xt[:2]
         r_pred = np.linalg.norm(delta)
-        phi_pred = np.arctan2(delta[1], delta[0]) - xt[2]
+        # adding robot theta because positive phi = negative theta
+        phi_pred = self.wrap_angle(np.arctan2(delta[1], delta[0]) + xt[2])
         h = (r_pred, phi_pred)
 
         # calculate 2x2 Jacobian H
@@ -155,6 +164,7 @@ class fastSLAM:
 
             r = np.linalg.norm(np.array([cam_x, cam_z]))
             phi = current_angle + np.arctan2(cam_x, cam_z)
+            phi = self.wrap_angle(phi)
 
             js.append((id_, r, phi))
         return js
@@ -181,22 +191,18 @@ class fastSLAM:
         j = np.array([r, phi])
 
         h, H = self.observation_model(xt, l)
-
+        h = np.array(h)
         Q = np.matmul(np.matmul(H, l.Sigma), H.T) + self.Q
-        # print(Q)
-
-        # print(Q.shape, H.shape)
-
         K = np.matmul(np.matmul(l.Sigma, H.T), np.linalg.inv(Q))
+        # l_prime = self.inverse_observation_model(xt, j)
 
-        l_prime = self.inverse_observation_model(xt, j)
-        diff = l_prime - l.mu
-
-        l.mu = l.mu + np.matmul(K, diff)
+        # difference between observed landmark readings and predicted landmark position
+        # based on current position and landmark mu
+        l.mu = l.mu + np.matmul(K, j-h)
         l.Sigma = np.matmul((np.identity(2) - np.matmul(K, H)), l.Sigma)
 
         weight = (np.linalg.norm(2 * pi * Q) ** (-0.5)) * np.exp(
-            -0.5 * np.matmul(np.matmul(diff.T, np.linalg.inv(Q)), diff))
+            -0.5 * np.matmul(np.matmul((j-h).T, np.linalg.inv(Q)), j-h))
 
         return weight
 
