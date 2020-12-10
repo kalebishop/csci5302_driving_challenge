@@ -40,7 +40,7 @@ class fastSLAM:
     """
 
     def __init__(self):
-        self.N = 30  # max number of particles
+        self.N = 25  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.8
@@ -51,13 +51,14 @@ class fastSLAM:
         self.w_avg_pos_weights = []
         self.best_landmark_estimate = {}
         self.resample_particles()
-        self.first_lap = True
+        self.lap_num = 0
         self.curr_index = 0
         self.angle_error = 0
+        self.past_start = False
 
         # Initialize measurement covariance
         # TODO tune
-        self.us_sigma = 0.02
+        self.us_sigma = 0.01
         self.ua_sigma = 0.1
         self.Q = np.array([[1, 0],
                            [0, np.deg2rad(5.0)]])
@@ -217,7 +218,7 @@ class fastSLAM:
         weight = (np.linalg.norm(2 * pi * Q) ** (-0.5)) * np.exp(
             -0.5 * np.matmul(np.matmul(diff.T, np.linalg.inv(Q)), diff))
 
-        if self.first_lap:
+        if self.lap_num == 0:
             diff *= min(1, -2 / np.log10(weight + 1e-30))
 
             l.mu = l.mu + np.matmul(K, diff)
@@ -325,7 +326,7 @@ class fastSLAM:
 
 
         # PROPORTIONAL COMPONENT
-        TARGET_OFFSET = 50
+        TARGET_OFFSET = 25
         ci = closest_point_idx
         ti = closest_point_idx + TARGET_OFFSET
         P_error = np.arctan2(self.Xs[ti] - self.Xs[ci], self.Ys[ti] - self.Ys[ci])
@@ -337,7 +338,12 @@ class fastSLAM:
 
         I_error /= TARGET_OFFSET
 
-        self.error = 0.5 * P_error + 0.5 * I_error
+        self.curr_index = ci
+
+
+        print(f"curr point {(self.Xs[ci], self.Ys[ci])}, target_point: {(self.Xs[ti], self.Ys[ti])} p error: {P_error}, i error: {I_error}")
+
+        self.error = min(0.99, 0.5 * P_error + 0.5 * I_error)
 
 
     def update_particle_and_landmarks(self, p, js):
@@ -405,16 +411,27 @@ class fastSLAM:
 
         self.resample_particles(best_particle, best_weight, visible_landmarks)
 
+        if best_particle.mu[0] > 25:
+            self.past_start = True
 
-        if len(self.Xs) > 4000 and best_particle.mu[0] > 1 and -5 < best_particle.mu[1] < 5:
+
+        if self.past_start and 1 < best_particle.mu[0] < 10 and -5 < best_particle.mu[1] < 5:
             print("Finished lap!")
-            map_trajectory = zip(self.Xs, self.Ys)
-            traj_file = "trajectory.p"
-            with open(traj_file, mode='wb') as f:
-                pickle.dump((self.Xs, self.Ys, best_particle.landmarks), f)
-            self.first_lap = False
+            if self.lap_num == 0:
+                traj_file = "trajectory.p"
+                with open(traj_file, mode='wb') as f:
+                    pickle.dump((self.Xs, self.Ys, best_particle.landmarks), f)
+
+            self.lap_num += 1
+            self.past_start = False
             for p in self.particles:
                 p.mu = np.zeros(3)
+
+            fig = plt.figure()
+            plt.plot(self.Xs[::10], self.Ys[::10])
+            fig.savefig(f'lap_{self.lap_num}.png', dpi=fig.dpi)
+            print(f"Saved plot to: lap_{self.lap_num}.png")
+            plt.close(fig)
 
 
         if len(self.Xs) % 500 == 0:
@@ -425,7 +442,7 @@ class fastSLAM:
             plt.close(fig)
             # plt.show()
 
-        if not self.first_lap:
+        if self.lap_num > 0:
             self.update_window(best_particle)
 
 

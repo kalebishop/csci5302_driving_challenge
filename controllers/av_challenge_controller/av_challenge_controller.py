@@ -68,7 +68,7 @@ while robot.step() != -1:
     if count % 100 == 0:
         print(f"Step count: {count}")
 
-    if fSLAM.first_lap:
+    if fSLAM.lap_num == 0:
         # Read the sensors:
         front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
         rear_cam_img = np.float32(robot.rear_camera.getImageArray())
@@ -79,10 +79,10 @@ while robot.step() != -1:
             # find the error from the road line
             error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
             angle_error = robot.calculate_front_offset(error)
+            control = line_follower.get_control(angle_error)
     else:
-        angle_error = fSLAM.error
-
-    control = line_follower.get_control(angle_error)
+        control = fSLAM.error
+        print("CONTROL:", control)
 
     target_speed = max(30 * (1 - abs(control) * 5),  6)
     # if abs(control) > 0.2:
@@ -105,8 +105,8 @@ while robot.step() != -1:
         # ignore road, barriers and whatever twoers are
         obj_model = obj.get_model()
         pos_on_image = obj.get_position_on_image()
-        # if not ((1. / 3) * robot.CAM_WIDTH < pos_on_image[0] < (2. / 3) * robot.CAM_WIDTH):
-        #     continue
+        if not ((1. / 3) * robot.CAM_WIDTH < pos_on_image[0] < (2. / 3) * robot.CAM_WIDTH):
+            continue
         if b'road' in obj_model or b'crash barrier' in obj_model:
             side_pieces.append((obj.get_id(), obj.get_position()))
             continue
@@ -133,8 +133,8 @@ while robot.step() != -1:
     for obj in visual_landmarks_rear:
         obj_model = obj.get_model()
         pos_on_image = obj.get_position_on_image()
-        # if not ( (1./3) * robot.CAM_WIDTH < pos_on_image[0] < (2./3) * robot.CAM_WIDTH ):
-        #     continue
+        if not ( (1./3) * robot.CAM_WIDTH < pos_on_image[0] < (2./3) * robot.CAM_WIDTH ):
+            continue
         if b'road' in obj_model or b'crash barrier' in obj_model:
             obj_pos = obj.get_position()
             # change object position to the front camera's reference frame
@@ -152,8 +152,8 @@ while robot.step() != -1:
         obj_pos[0] = -obj_pos[0]
         visual_landmarks.append((obj.get_id(), obj_pos))
 
-    if len(visual_landmarks) < 10:
-        visual_landmarks += side_pieces[:10 - len(visual_landmarks)]
+    if len(visual_landmarks) < 20:
+        visual_landmarks += side_pieces[:20 - len(visual_landmarks)]
 
     if count % 25 == 0:
         print(f"number of landmarks: {len(visual_landmarks)}")

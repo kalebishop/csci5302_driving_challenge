@@ -870,7 +870,7 @@ TeslaModel3 {
        frameThickness 0
        maxObjects 100
        occlusion FALSE
-       maxRange 50
+       maxRange 100
       }
     }
   ]
@@ -898,7 +898,7 @@ TeslaModel3 {
        frameThickness 0
        maxObjects 100
        occlusion FALSE
-       maxRange 50
+       maxRange 100
       }
       ###
       name "front_camera"
