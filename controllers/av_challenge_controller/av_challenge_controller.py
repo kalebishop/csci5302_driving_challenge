@@ -67,6 +67,12 @@ angle_error = 0
 
 
 vehicle_data = {}
+# get actions by calling
+# rrt = RRT()
+# node_list = rrt.generate_graph()
+# actions = rrt.get_actions(node_list)
+actions = []
+steps = 10
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
@@ -101,6 +107,18 @@ while robot.step() != -1:
     robot.setCruisingSpeed(target_speed)
     # print("steering angle: %f" % control)
     robot.setSteeringAngle(control)
+
+
+    # parallel parking
+    # each action from rrt is run for 10 time steps
+    # if count < len(actions) * steps:
+    #     speed, steering = actions[count//steps]
+    #     print(speed, steering)
+    # else:
+    #     speed = 0
+    #     steering = 0
+    # robot.setCruisingSpeed(-speed)
+    # robot.setSteeringAngle(steering)
 
     visual_landmarks = []
     side_pieces = []
