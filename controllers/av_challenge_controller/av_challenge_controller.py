@@ -58,8 +58,8 @@ midpoint_y = robot.front_camera.getWidth() / 2.0
 
 robot.setCruisingSpeed(40)
 
-pbar = tqdm(total=10000)
 count = 0
+angle_error = 0
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
@@ -67,36 +67,36 @@ while robot.step() != -1:
     count += 1
     if count % 100 == 0:
         print(f"Step count: {count}")
-    pbar.update(1)
-    # Read the sensors:
-    front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
-    rear_cam_img = np.float32(robot.rear_camera.getImageArray())
-    lidar_data = np.array(robot.lidar.getRangeImage())
 
-    # print(robot.find_road_center(front_cam_img))
-    # get lines from camera image
-    lines = road_line_detector.get_lines(front_cam_img)
-    road_line_points = line_follower.get_road_lines(lines)
+    if fSLAM.first_lap:
+        # Read the sensors:
+        front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
+        rear_cam_img = np.float32(robot.rear_camera.getImageArray())
+        # get lines from camera image
+        lines = road_line_detector.get_lines(front_cam_img)
+        road_line_points = line_follower.get_road_lines(lines)
+        if len(road_line_points) > 0:
+            # find the error from the road line
+            error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
+            angle_error = robot.calculate_front_offset(error)
+    else:
+        angle_error = fSLAM.error
 
-    if len(road_line_points) > 0:
-        # find the error from the road line
-        error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
-        angle_error = robot.calculate_front_offset(error)
-        control = line_follower.get_control(angle_error)
-        if abs(control) > 0.2:
-            # brake and reduce speed when turning
-            robot.setBrakeIntensity(0.25)
-            robot.setCruisingSpeed(5)
-        else:
-            # remove braking
-            robot.setBrakeIntensity(0)
-            # set speed to 30 or lidar reading from center point - 20
-            # the max reading from center point is 80
-            robot.setCruisingSpeed(max(5, lidar_data[int(len(lidar_data) / 2)] - 20))
-        # print("steering angle: %f" % control)
-        robot.setSteeringAngle(control)
+    control = line_follower.get_control(angle_error)
+
+    target_speed = max(30 * (1 - abs(control) * 5),  6)
+    # if abs(control) > 0.2:
+        # brake and reduce speed when turning
+    robot.setBrakeIntensity(max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
+
+    # print(target_speed, control, max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
+
+    robot.setCruisingSpeed(target_speed)
+    # print("steering angle: %f" % control)
+    robot.setSteeringAngle(control)
 
     visual_landmarks = []
+    side_pieces = []
     # Get camera objects for visualSLAM
     visual_landmarks_front = robot.front_camera.getRecognitionObjects()
     visual_landmarks_rear = robot.rear_camera.getRecognitionObjects()
@@ -104,9 +104,11 @@ while robot.step() != -1:
     for obj in visual_landmarks_front:
         # ignore road, barriers and whatever twoers are
         obj_model = obj.get_model()
-        if b'road' in obj_model:
-            continue
-        if b'crash barrier' in obj_model:
+        pos_on_image = obj.get_position_on_image()
+        # if not ((1. / 3) * robot.CAM_WIDTH < pos_on_image[0] < (2. / 3) * robot.CAM_WIDTH):
+        #     continue
+        if b'road' in obj_model or b'crash barrier' in obj_model:
+            side_pieces.append((obj.get_id(), obj.get_position()))
             continue
         if b'twoer' in obj_model: # I have no idea what twoer is, but it shows up quite a bit???
             continue
@@ -130,9 +132,16 @@ while robot.step() != -1:
 
     for obj in visual_landmarks_rear:
         obj_model = obj.get_model()
-        if b'road' in obj_model:
-            continue
-        if b'crash barrier' in obj_model:
+        pos_on_image = obj.get_position_on_image()
+        # if not ( (1./3) * robot.CAM_WIDTH < pos_on_image[0] < (2./3) * robot.CAM_WIDTH ):
+        #     continue
+        if b'road' in obj_model or b'crash barrier' in obj_model:
+            obj_pos = obj.get_position()
+            # change object position to the front camera's reference frame
+            obj_pos[2] += robot.FRONT_CAMERA_OFFSET
+            obj_pos[2] = -obj_pos[2]
+            obj_pos[0] = -obj_pos[0]
+            side_pieces.append((obj.get_id(), obj_pos))
             continue
         if b'twoer' in obj_model:
             continue
@@ -143,12 +152,12 @@ while robot.step() != -1:
         obj_pos[0] = -obj_pos[0]
         visual_landmarks.append((obj.get_id(), obj_pos))
 
+    if len(visual_landmarks) < 10:
+        visual_landmarks += side_pieces[:10 - len(visual_landmarks)]
+
     if count % 25 == 0:
         print(f"number of landmarks: {len(visual_landmarks)}")
-    #
-    # print(len(visual_landmarks_front), len(visual_landmarks))
-    # visual_landmarks = visual_landmarks_front #+ visual_landmarks_back
-    # print([l.get_model() for l in visual_landmarks])
+
 
     curr_speed = robot.getCurrentSpeed()
     curr_speed = curr_speed if not math.isnan(curr_speed) else 0
@@ -159,4 +168,3 @@ while robot.step() != -1:
     fSLAM.next_state(visual_landmarks, action)
 
 # Enter here exit cleanup code.
-pbar.close()
