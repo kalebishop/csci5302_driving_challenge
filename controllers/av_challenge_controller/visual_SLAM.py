@@ -40,16 +40,13 @@ class fastSLAM:
     """
 
     def __init__(self):
-        self.N = 25  # max number of particles
+        self.N = 30  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.8
         self.Xs = []
         self.Ys = []
         self.particles = [Particle()]
-        self.w_avg_pos = []
-        self.w_avg_pos_weights = []
-        self.best_landmark_estimate = {}
         self.resample_particles()
         self.lap_num = 0
         self.curr_index = 0
@@ -60,7 +57,7 @@ class fastSLAM:
         # TODO tune
         self.us_sigma = 0.01
         self.ua_sigma = 0.1
-        self.Q = np.array([[1, 0],
+        self.Q = np.array([[0.8, 0],
                            [0, np.deg2rad(5.0)]])
 
         self.axle_length = 2.875  # in meters; needed for motion model
@@ -235,61 +232,11 @@ class fastSLAM:
         if best_weight is None or best_weight == 0:
             best_weight = 1.
 
-
-        # # Create some high quality guesses:
-        # # 1. Do a weighted average over all particles for both mu and landmarks
-        # if len(self.w_avg_pos) > 0 and visible_landmarks is not None:
-        #     new_mu_1 = np.average(self.w_avg_pos, weights=self.w_avg_pos_weights, axis=0)
-        #     if len(self.Xs) % 25 == 0:
-        #         print("weighted", new_mu_1)
-        #
-        #     lms = []
-        #     for id_ in self.best_landmark_estimate:
-        #         l_list = self.best_landmark_estimate[id_]
-        #         l_mus, ws = zip(*l_list)
-        #         if np.sum(ws) == 0.:
-        #             continue
-        #         l_mu = np.average(l_mus, weights=ws, axis=0)
-        #         lms.append(Landmark(id_, l_mu))
-        #
-        #     new_particle_1 = Particle(new_mu_1, lms)
-        #     js = self.get_landmarks(new_particle_1, visible_landmarks)
-        #     self.update_particle_and_landmarks(new_particle_1, js)
-        #     if len(self.Xs) % 25 == 0:
-        #         print(f"best weight: {best_weight}, particle 1 (new) weight: {new_particle_1.weight}")
-        #     if new_particle_1.weight > best_weight:
-        #         best_weight, best_particle = new_particle_1.weight, new_particle_1
-        #
-        #     self.particles += [new_particle_1]
-        #
-        # # 2. Adjust position of best particle to line up with landmark observations
-        # if visible_landmarks is not None:
-        #     new_mu_2 = self.get_estimated_position(best_particle, visible_landmarks)
-        #     new_particle_2 = Particle(new_mu_2, deepcopy(best_particle.landmarks))
-        #     js = self.get_landmarks(new_particle_2, visible_landmarks)
-        #     self.update_particle_and_landmarks(new_particle_2, js)
-        #     if len(self.Xs) % 25 == 0:
-        #         print(f"best weight: {best_weight}, particle 2 (new) weight: {new_particle_2.weight}")
-        #     if new_particle_2.weight > best_weight:
-        #         best_weight, best_particle = new_particle_2.weight, new_particle_2
-        #
-        #     self.particles += [new_particle_2]
-
-        # Step 1 top 20% of samples
+        # Step 1 keep top 20% of samples
         N = max(1, int(len(self.particles) * 0.2))
         weights = np.array([p.weight for p in self.particles])
         inds = np.argpartition(weights, -1 * N)
         new_particles = [self.particles[i] for i in inds[-N:]]
-
-        #     print("YIKES, should only happen once")
-
-        # If all particles have a 0 weight, randonly sample 10% of old particles to keep
-        # np.random.shuffle(new_particles)
-        # if len(new_particles) == 0:
-        #     print("THIS SHOULD NEVER HAPPEN", best_weight, len(new_particles), len(self.particles))
-        #     new_particles = self.particles[:int(self.N * 0.1)]
-        #
-        # new_particles = new_particles[:self.N]
 
         if best_particle is not None:
             self.Xs.append(best_particle.mu[0])
@@ -329,19 +276,19 @@ class fastSLAM:
         TARGET_OFFSET = 25
         ci = closest_point_idx
         ti = closest_point_idx + TARGET_OFFSET
-        P_error = np.arctan2(self.Xs[ti] - self.Xs[ci], self.Ys[ti] - self.Ys[ci])
+        P_error = np.arctan2(self.Ys[ti] - self.Ys[ci], self.Xs[ti] - self.Xs[ci])
 
         # INTEGRAL COMPONENT
         I_error = 0
         for i in range(TARGET_OFFSET):
-            I_error += np.arctan2(self.Xs[ci + i] - self.Xs[ci], self.Ys[ci + i] - self.Ys[ci])
+            I_error += np.arctan2(self.Ys[ci + i] - self.Ys[ci], self.Xs[ci + i] - self.Xs[ci])
 
         I_error /= TARGET_OFFSET
 
         self.curr_index = ci
 
-
-        print(f"curr point {(self.Xs[ci], self.Ys[ci])}, target_point: {(self.Xs[ti], self.Ys[ti])} p error: {P_error}, i error: {I_error}")
+        if len(self.Xs) % 25 == 0:
+            print(f"curr point {(self.Xs[ci], self.Ys[ci])}, target_point: {(self.Xs[ti], self.Ys[ti])} p error: {P_error}, i error: {I_error}")
 
         self.error = min(0.99, 0.5 * P_error + 0.5 * I_error)
 
@@ -355,9 +302,6 @@ class fastSLAM:
                 if id_ == p_landmark.id:
                     # landmark has been seen - make update
                     w_j = self.EKF_Update(p.mu, (r, phi), p_landmark)
-                    if id_ not in self.best_landmark_estimate:
-                        self.best_landmark_estimate[id_] = []
-                        self.best_landmark_estimate[id_].append((p_landmark.mu, w_j))
                     break
             else:  # Landmark is unknown
                 w_j = self.new_landmark_weight
@@ -369,9 +313,6 @@ class fastSLAM:
         if len(new_weight) > 0:
             new_weight = np.mean(new_weight)  # take n_th root of the product of the probabilities
             p.update_weight(new_weight)
-
-        self.w_avg_pos.append(p.mu)
-        self.w_avg_pos_weights.append(new_weight)
 
     def next_state(self, zt, ut):
         """
@@ -386,9 +327,6 @@ class fastSLAM:
         """
         visible_landmarks = zt
         best_weight, best_particle = 0., None
-        self.w_avg_pos = []
-        self.w_avg_pos_weights = []
-        self.best_landmark_estimate = {}
 
         # For each particle
         for p in self.particles:
@@ -425,7 +363,9 @@ class fastSLAM:
             self.lap_num += 1
             self.past_start = False
             for p in self.particles:
-                p.mu = np.zeros(3)
+                correction_theta = np.random.normal(0, np.deg2rad(1))
+                if abs(p.mu[2]) > abs(correction_theta):
+                    p.mu[2] = correction_theta
 
             fig = plt.figure()
             plt.plot(self.Xs[::10], self.Ys[::10])

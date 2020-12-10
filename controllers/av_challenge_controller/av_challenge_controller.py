@@ -55,6 +55,8 @@ line_follower = PIDLineFollower()
 midpoint_y = robot.front_camera.getWidth() / 2.0
 # print(robot.getCurrentPosition())
 
+mapping_min_max_speed = (6, 30)
+regular_min_max_speed = (10, 50)
 
 robot.setCruisingSpeed(40)
 
@@ -68,23 +70,21 @@ while robot.step() != -1:
     if count % 100 == 0:
         print(f"Step count: {count}")
 
-    if fSLAM.lap_num == 0:
-        # Read the sensors:
-        front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
-        rear_cam_img = np.float32(robot.rear_camera.getImageArray())
-        # get lines from camera image
-        lines = road_line_detector.get_lines(front_cam_img)
-        road_line_points = line_follower.get_road_lines(lines)
-        if len(road_line_points) > 0:
-            # find the error from the road line
-            error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
-            angle_error = robot.calculate_front_offset(error)
-            control = line_follower.get_control(angle_error)
-    else:
-        control = fSLAM.error
-        print("CONTROL:", control)
+    min_s, max_s = mapping_min_max_speed if fSLAM.lap_num < 1 else regular_min_max_speed
 
-    target_speed = max(30 * (1 - abs(control) * 5),  6)
+    # Read the sensors:
+    front_cam_img = np.float32(robot.front_camera.getImageArray())  # returns image as 3D array
+    rear_cam_img = np.float32(robot.rear_camera.getImageArray())
+    # get lines from camera image
+    lines = road_line_detector.get_lines(front_cam_img)
+    road_line_points = line_follower.get_road_lines(lines)
+    if len(road_line_points) > 0:
+        # find the error from the road line
+        error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
+        angle_error = robot.calculate_front_offset(error)
+        control = line_follower.get_control(angle_error)
+
+    target_speed = max(max_s * (1 - abs(control) * 5),  min_s)
     # if abs(control) > 0.2:
         # brake and reduce speed when turning
     robot.setBrakeIntensity(max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
