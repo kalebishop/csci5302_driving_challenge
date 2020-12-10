@@ -8,6 +8,7 @@ from tqdm import tqdm
 from vehicle import Driver
 import numpy as np
 from visual_SLAM import fastSLAM
+from visualize_telemetry import AVTelemetry
 
 import math
 from image_filtering import Detector
@@ -44,6 +45,7 @@ class TeslaBot(Driver):
 
 robot = TeslaBot()
 fSLAM = fastSLAM()
+tele = AVTelemetry(robot)
 # supervisor = Supervisor()
 
 # lidar_width = lidar.getHorizontalResolution()
@@ -63,9 +65,14 @@ robot.setCruisingSpeed(40)
 count = 0
 angle_error = 0
 
+
+vehicle_data = {}
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
+    # TESTING
+    tele.display_particles(fSLAM.particles)
+    # # #
     count += 1
     if count % 100 == 0:
         print(f"Step count: {count}")
@@ -166,5 +173,10 @@ while robot.step() != -1:
 
     action = (curr_speed, curr_angle)
     fSLAM.next_state(visual_landmarks, action)
+
+    vehicle_data["speed"] =  str(curr_speed)
+    vehicle_data["steer angle"] = str(curr_angle)
+
+    tele.display_statistics(vehicle_data)
 
 # Enter here exit cleanup code.

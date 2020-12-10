@@ -914,7 +914,7 @@ TeslaModel3 {
     DEF CAMERA Display {
       name "tele_display"
       width 256
-      height 128
+      height 256
     }
   ]
 }
