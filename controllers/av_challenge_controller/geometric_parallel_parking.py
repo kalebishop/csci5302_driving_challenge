@@ -30,12 +30,27 @@ class AckermannParker:
         #     Obstacle([80, 134], 2, 5)
         # ]
 
-        self.goal = np.array([83, 138])
-        self.start = np.array([87, 161])
+        self.goal1 = np.array([83, 161])
+        self.goal2 = np.array([80, 155])
+        self.start = np.array([87, 138])
         self.cur_state = np.array([self.start[0], self.start[1], np.pi / 2])
         self.goal_reached = False
 
+        self.aligned = False
+        self.parked = False
+
         self.worldinfo_basic_timestep = 10
+
+        _, _, _, self.s1, self.t1 = self.calculate_trajectory()
+
+    def parallel_park(self):
+        if not self.aligned:
+            action = self.park_control(self.s1, self.t1)
+            if action[0] == 0 and action[1] == 0:
+                self.aligned = True
+                print("ALIGNED")
+            return action
+        return (0, 0)
 
     def observation_tf(self, pos):
         # pos as relative [x, z] to car
@@ -48,7 +63,7 @@ class AckermannParker:
 
     def calculate_trajectory(self):
         initial_pt = self.start
-        goal = self.goal
+        goal = self.goal1
         r_prime = self.ri_min + self.width/2
         y_dir = (goal - initial_pt)[1] / abs((goal - initial_pt)[1])
         
@@ -59,7 +74,7 @@ class AckermannParker:
         t_x = (c1[0] + c2_x) / 2
         t_y = c1[1] - y_dir * np.sqrt(r_prime ** 2 - (t_x - c1[0]) ** 2)
 
-        s_y = 2 * t_y + y_dir * c1[1]
+        s_y = 2 * t_y - c1[1]
         s_x = initial_pt[0]
         c2_y = s_y
 
@@ -70,7 +85,7 @@ class AckermannParker:
 
     def park_control(self, start_pt, trans_pt):
         update_pt = self.cur_state[:2]
-        goal_pt = self.goal
+        goal_pt = self.goal1
         initial = self.start
 
         if (goal_pt - initial)[1] >= 0:
@@ -111,7 +126,7 @@ class AckermannParker:
                 self.goal_reached = True
                 return (-5, 0.0)
 
-        if self.goal_reached and abs(self.cur_state[2] - np.pi/2) > 0.03:
+        if self.goal_reached and abs(self.cur_state[2] - np.pi/2) > 0.01:
             diff = self.cur_state[2] - np.pi /2
             steer = 0.5 if diff >= 0 else -0.5
             return (1, steer)

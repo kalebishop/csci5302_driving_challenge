@@ -10,7 +10,7 @@ import numpy as np
 from visual_SLAM import fastSLAM
 from visualize_telemetry import AVTelemetry
 from parallel_parking import *
-from revised_parallel_parking import AckermannParker
+from geometric_parallel_parking import AckermannParker
 
 import math
 from image_filtering import Detector
@@ -79,8 +79,8 @@ vehicle_data = {}
 # print(actions)
 # actions = []
 park_controller = AckermannParker()
-c1, c2, _, start_pt, trans_pt = park_controller.calculate_trajectory()
-print(start_pt, trans_pt)
+# c1, c2, _, start_pt, trans_pt = park_controller.calculate_trajectory()
+# print(start_pt, trans_pt)
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
@@ -124,16 +124,14 @@ while robot.step() != -1:
     # else:
     #     speed = 0
     #     steering = 0
-    if not park_controller.goal_reached:
-        s, phi = park_controller.park_control(start_pt, trans_pt)
-        if count % 100 == 0:
-            print(s, phi)
-            print(park_controller.cur_state)
-        robot.setCruisingSpeed(s)
-        robot.setSteeringAngle(phi)
-        park_controller.update_pos((s, phi))
-    else:
-        robot.setCruisingSpeed(0)
+    s, phi = park_controller.parallel_park()
+    if count % 100 == 0:
+        print(s, phi)
+        print(park_controller.cur_state)
+    robot.setCruisingSpeed(s)
+    robot.setSteeringAngle(phi)
+    park_controller.update_pos((s, phi))
+
 
     # visual_landmarks = []
     # side_pieces = []
