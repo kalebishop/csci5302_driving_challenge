@@ -76,7 +76,7 @@ rrt = RRT()
 node_list = rrt.generate_graph()
 actions = rrt.get_actions(node_list)
 print(actions)
-steps = 5 / rrt.time_step
+steps = 100
 # actions = []
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
@@ -115,7 +115,6 @@ while robot.step() != -1:
 
 
     # # parallel parking
-    # # each action from rrt is run for 5 seconds = 5*step/s time steps
     if count < len(actions) * steps:
         speed, steering = actions[int(count//steps)]
         print(speed, steering)
