@@ -127,7 +127,7 @@ class RRT:
         speed_delta_per_time_step = self.zeroToOneHundred * (speed_diff / 100.) * self.time_step
         speed = target_speed
         # perform action for some steps
-        for i in range(5 / self.time_step):
+        for i in range(5):
             
             x, y, theta = state
 
