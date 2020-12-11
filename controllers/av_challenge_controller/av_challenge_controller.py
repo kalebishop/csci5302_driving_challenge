@@ -10,6 +10,7 @@ import numpy as np
 from visual_SLAM import fastSLAM
 from visualize_telemetry import AVTelemetry
 from parallel_parking import *
+from revised_parallel_parking import AckermannParker
 
 import math
 from image_filtering import Detector
@@ -50,7 +51,7 @@ fSLAM = fastSLAM()
 tele = AVTelemetry(robot)
 # supervisor = Supervisor()
 robot_step = 10
-steps_per_second = 1000 / robot_step
+steps = 5 * 1000 / robot_step
 
 # lidar_width = lidar.getHorizontalResolution()
 # lidar_max_range = lidar.getMaxRange()
@@ -72,12 +73,14 @@ angle_error = 0
 
 vehicle_data = {}
 # get actions by calling
-rrt = RRT()
-node_list = rrt.generate_graph()
-actions = rrt.get_actions(node_list)
-print(actions)
-steps = 5 / rrt.time_step
+# rrt = RRT()
+# node_list = rrt.generate_graph()
+# actions = rrt.get_actions(node_list)
+# print(actions)
 # actions = []
+park_controller = AckermannParker()
+c1, c2, _, start_pt, trans_pt = park_controller.calculate_trajectory()
+print(start_pt, trans_pt)
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
@@ -85,8 +88,8 @@ while robot.step() != -1:
     # tele.display_particles(fSLAM.particles)
     # # #
     count += 1
-    if count % 100 == 0:
-        print(f"Step count: {count}")
+    # if count % 100 == 0:
+    #     print(f"Step count: {count}")
 
     # min_s, max_s = mapping_min_max_speed if fSLAM.lap_num < 1 else regular_min_max_speed
 
@@ -115,17 +118,22 @@ while robot.step() != -1:
 
 
     # # parallel parking
-    # # each action from rrt is run for 5 seconds = 5*step/s time steps
-    if count < len(actions) * steps:
-        speed, steering = actions[int(count//steps)]
-        print(speed, steering)
+    # # each action from rrt is run for 40
+    # if count < len(actions) * steps:
+    #     speed, steering = actions[int(count//steps)]
+    # else:
+    #     speed = 0
+    #     steering = 0
+    if not park_controller.goal_reached:
+        s, phi = park_controller.park_control(start_pt, trans_pt)
+        if count % 100 == 0:
+            print(s, phi)
+            print(park_controller.cur_state)
+        robot.setCruisingSpeed(s)
+        robot.setSteeringAngle(phi)
+        park_controller.update_pos((s, phi))
     else:
-        speed = 0
-        steering = 0
-
-    robot.setCruisingSpeed(-speed)
-
-    robot.setSteeringAngle(steering)
+        robot.setCruisingSpeed(0)
 
     # visual_landmarks = []
     # side_pieces = []
