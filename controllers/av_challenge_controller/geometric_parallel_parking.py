@@ -14,7 +14,7 @@ class Obstacle:
         return [[x-half_x, y-half_y], [x-half_x, y+half_y], [x+half_x, y+half_y], [x+half_x, y-half_y]]
 
 class AckermannParker:
-    def __init__(self):
+    def __init__(self, align_obs=None):
         self.wheelbase = 2.875
         self.length = 4.69
         self.overh = self.length - self.wheelbase / 2
@@ -25,31 +25,41 @@ class AckermannParker:
         self.re_min = np.sqrt((self.ri_min + self.width)**2 + (self.wheelbase + self.overh) ** 2)
         self.l_min = self.overh + np.sqrt(self.re_min**2 - self.ri_min**2)
 
-        self.obstacles = [
-            Obstacle([80, 147], 2, 7),
-            Obstacle([80, 134], 2, 5)
-        ]
+        # self.obstacles = [
+        #     Obstacle([80, 147], 2, 7),
+        #     Obstacle([80, 134], 2, 5)
+        # ]
 
-        self.goal = np.array([80, 142])
-        self.start = np.array([87, 159])
-        self.cur_state = np.array([self.start[0], self.start[1], 3 * np.pi / 2])
+        self.goal = np.array([83, 138])
+        self.start = np.array([87, 161])
+        self.cur_state = np.array([self.start[0], self.start[1], np.pi / 2])
         self.goal_reached = False
 
         self.worldinfo_basic_timestep = 10
+
+    def observation_tf(self, pos):
+        # pos as relative [x, z] to car
+        delta = pos - self.cur_state[:2]
+        r = np.linalg.norm(delta)
+        phi = self.cur_state[2] - np.arctan2(delta[1], delta[0])
+        x, y, theta = self.cur_state
+        landmark_pos = np.array([x, y]) + np.array([r * np.sin(phi), r * np.cos(phi)])
+        return landmark_pos
 
     def calculate_trajectory(self):
         initial_pt = self.start
         goal = self.goal
         r_prime = self.ri_min + self.width/2
+        y_dir = (goal - initial_pt)[1] / abs((goal - initial_pt)[1])
         
         c1 = np.array([goal[0] + r_prime, goal[1]])
 
         c2_x = initial_pt[0] - r_prime
         
         t_x = (c1[0] + c2_x) / 2
-        t_y = c1[1] + np.sqrt(r_prime ** 2 - (t_x - c1[0]) ** 2)
+        t_y = c1[1] - y_dir * np.sqrt(r_prime ** 2 - (t_x - c1[0]) ** 2)
 
-        s_y = 2 * t_y - c1[1]
+        s_y = 2 * t_y + y_dir * c1[1]
         s_x = initial_pt[0]
         c2_y = s_y
 
@@ -63,29 +73,51 @@ class AckermannParker:
         goal_pt = self.goal
         initial = self.start
 
-        if update_pt[1] > start_pt[1]:
-            # pull forward
-            return (5, 0.0)
+        if (goal_pt - initial)[1] >= 0:
+            # pulling forward
+            if update_pt[1] < start_pt[1]:
+                # pull to start
+                return (5, 0.0)
 
-        elif update_pt[1] <= start_pt[1] and update_pt[1] > trans_pt[1]:
-            # turn in left
-            return (5, -0.5)
+            elif update_pt[1] >= start_pt[1] and update_pt[1] < trans_pt[1]:
+                # turn in left
+                return (5, -0.5)
 
-        elif update_pt[1] <= trans_pt[1] and update_pt[1] > (goal_pt[1] - 0.5) \
-            and not self.goal_reached:
-            # turn in right
-            return (5, 0.5)
+            elif update_pt[1] >= trans_pt[1] and update_pt[1] < (goal_pt[1] - 0.5) \
+                and not self.goal_reached:
+                # turn in right
+                return (5, 0.5)
 
-        elif update_pt[1] <= goal_pt[1] - 0.5:
-            # pull back - done
-            goal_reached = True
-            return (-5, 0.0)
-
-        elif self.goal_reached:
-            # pull forward - done
-            return (5, 0.0)
+            elif update_pt[1] >= goal_pt[1] - 0.5 and not self.goal_reached:
+                # pull back - done
+                self.goal_reached = True
+                return (-5, 0.0)
         else:
-            raise NotImplementedError
+            # pulling backward
+            if update_pt[1] > start_pt[1]:
+                return(-5, 0.0)
+
+            elif update_pt[1] <= start_pt[1] and update_pt[1] > trans_pt[1]:
+                # turn in left
+                return (-5, -0.5)
+
+            elif update_pt[1] <= trans_pt[1] and update_pt[1] > (goal_pt[1] - 0.5) \
+                and not self.goal_reached:
+                # turn in right
+                return (-5, 0.5)
+
+            elif update_pt[1] <= goal_pt[1] - 0.5 and not self.goal_reached:
+                # pull back - done
+                self.goal_reached = True
+                return (-5, 0.0)
+
+        if self.goal_reached and abs(self.cur_state[2] - np.pi/2) > 0.03:
+            diff = self.cur_state[2] - np.pi /2
+            steer = 0.5 if diff >= 0 else -0.5
+            return (1, steer)
+        else:
+            return (0, 0.0)
+
 
     def motion_model(self, x, u):
         """
@@ -106,7 +138,7 @@ class AckermannParker:
         xp = us * cos(theta)
         yp = us * sin(theta)
         # self.axle length is distance btw axles
-        thetap = (us / self.wheelbase) * tan(ua)
+        thetap = (us / self.wheelbase) * tan(-1 * ua)
 
         # print(f"from ({x:.2f}, {y:.2f}, {theta:.2f}) to ({x + xp:.2f}, {y + yp:.2f}, {theta + thetap:.2f})")
 
@@ -114,3 +146,7 @@ class AckermannParker:
 
     def update_pos(self, action):
         self.cur_state = self.motion_model(self.cur_state, action)
+
+if __name__ == "__main__":
+    parker = AckermannParker()
+    parker.calculate_trajectory()
