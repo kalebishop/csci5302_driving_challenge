@@ -129,7 +129,7 @@ while robot.step() != -1:
             else:
                 speed = 0
                 steering = 0
-            robot.setCruisingSpeed(speed)
+            robot.setCruisingSpeed(-speed)
             robot.setSteeringAngle(steering)
         else:
             if not park_controller.goal_reached:
