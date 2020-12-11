@@ -31,7 +31,7 @@ class AckermannParker:
         # ]
 
         self.goal1 = np.array([83, 161])
-        self.goal2 = np.array([80, 155])
+        self.goal2 = np.array([80, 153])
         self.start = np.array([87, 138])
         self.cur_state = np.array([self.start[0], self.start[1], np.pi / 2])
         self.goal_reached = False
@@ -41,16 +41,25 @@ class AckermannParker:
 
         self.worldinfo_basic_timestep = 10
 
-        _, _, _, self.s1, self.t1 = self.calculate_trajectory()
+        _, _, _, self.s1, self.t1 = self.calculate_trajectory(self.start, self.goal1)
+        _, _, _, self.s2, self.t2 = self.calculate_trajectory(self.goal1, self.goal2)
+        print(self.s1, self.t1, self.s2, self.t2)
 
     def parallel_park(self):
         if not self.aligned:
-            action = self.park_control(self.s1, self.t1)
+            action = self.park_control(self.s1, self.t1, self.start, self.goal1)
             if action[0] == 0 and action[1] == 0:
                 self.aligned = True
                 print("ALIGNED")
-            return action
-        return (0, 0)
+                self.goal_reached = False
+        elif not self.parked:
+            action = self.park_control(self.s2, self.t2, self.goal1, self.goal2)
+            if action[0] == 0 and action[1] == 0:
+                self.parked = True
+                print("PARKED")
+        else:
+            action = (0, 0)
+        return action
 
     def observation_tf(self, pos):
         # pos as relative [x, z] to car
@@ -61,9 +70,7 @@ class AckermannParker:
         landmark_pos = np.array([x, y]) + np.array([r * np.sin(phi), r * np.cos(phi)])
         return landmark_pos
 
-    def calculate_trajectory(self):
-        initial_pt = self.start
-        goal = self.goal1
+    def calculate_trajectory(self, initial_pt, goal):
         r_prime = self.ri_min + self.width/2
         y_dir = (goal - initial_pt)[1] / abs((goal - initial_pt)[1])
         
@@ -83,10 +90,8 @@ class AckermannParker:
         trans_pt = np.array([t_x, t_y])
         return c1, c2, initial_pt, start_pt, trans_pt
 
-    def park_control(self, start_pt, trans_pt):
+    def park_control(self, start_pt, trans_pt, initial, goal_pt):
         update_pt = self.cur_state[:2]
-        goal_pt = self.goal1
-        initial = self.start
 
         if (goal_pt - initial)[1] >= 0:
             # pulling forward
@@ -98,12 +103,12 @@ class AckermannParker:
                 # turn in left
                 return (5, -0.5)
 
-            elif update_pt[1] >= trans_pt[1] and update_pt[1] < (goal_pt[1] - 0.5) \
+            elif update_pt[1] >= trans_pt[1] and update_pt[1] < (goal_pt[1]) \
                 and not self.goal_reached:
                 # turn in right
                 return (5, 0.5)
 
-            elif update_pt[1] >= goal_pt[1] - 0.5 and not self.goal_reached:
+            elif update_pt[1] >= goal_pt[1] and not self.goal_reached:
                 # pull back - done
                 self.goal_reached = True
                 return (-5, 0.0)
