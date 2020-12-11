@@ -44,6 +44,7 @@ class RRT:
         ]
         # road width = 17
         self.state_bounds = [[80, 90], [130, 160]]
+        # self.state_bounds = x_bounds, y_bounds
         self.thetas = np.arange(0, 360, 10) * np.pi / 180.
         self.axle_length = 3.0
         # simulation time step in seconds
@@ -124,10 +125,10 @@ class RRT:
 
         speed_diff = target_speed - current_speed
         speed_delta_per_time_step = self.zeroToOneHundred * (speed_diff / 100.) * self.time_step
-
-        # perform action for some time steps
-        for i in range(10):
-            speed = current_speed + speed_delta_per_time_step
+        speed = target_speed
+        # perform action for some steps
+        for i in range(5 / self.time_step):
+            
             x, y, theta = state
 
             xp = speed * np.cos(theta)
@@ -139,7 +140,7 @@ class RRT:
             path.append(next_state)
             current_speed = speed
             state = next_state
-        return path, current_speed
+        return path, target_speed
 
     def generate_graph(self, max_nodes=500):
         node_list = [Node(self.start_state)]
@@ -155,7 +156,7 @@ class RRT:
             # sample different actions (target_speed and steering_angle)
             best_action = None
             closest_distance = np.inf
-            for speed in np.linspace(-30, 30, 13):
+            for speed in np.linspace(-2, 2, 5):
                 for steering_angle in np.linspace(-0.7, 0.7, 15):
                     path, final_speed = self.steer(neighbor, speed, steering_angle)
                     if not self.collision_free(path):
@@ -220,7 +221,8 @@ class RRT:
         ax.set(xlabel='x',
                ylabel='y',
                zlabel='theta',
-               aspect='equal',
+            #    aspect='equal',
+               aspect='auto',
                xlim3d=(self.state_bounds[0][0], self.state_bounds[0][1]),
                ylim3d=(self.state_bounds[1][0], self.state_bounds[1][1]),
                zlim3d=(-np.pi, np.pi))
