@@ -40,7 +40,7 @@ class fastSLAM:
     """
 
     def __init__(self, map_=None):
-        self.N = 25  # max number of particles
+        self.N = 50  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.8
@@ -63,8 +63,8 @@ class fastSLAM:
 
         # Initialize measurement covariance
         # TODO tune
-        self.us_sigma = 0.01
-        self.ua_sigma = 0.1
+        self.us_sigma = 0.008
+        self.ua_sigma = 0.08
         self.Q = np.array([[0.8, 0],
                            [0, np.deg2rad(5.0)]])
 

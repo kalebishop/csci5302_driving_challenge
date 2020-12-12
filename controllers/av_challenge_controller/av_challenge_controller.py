@@ -51,7 +51,7 @@ road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]
 line_follower = PIDLineFollower()
 midpoint_y = robot.front_camera.getWidth() / 2.0
 
-mapping_min_max_speed = (6, 40)
+mapping_min_max_speed = (5, 30)
 regular_min_max_speed = (12, 60)
 
 robot.setCruisingSpeed(80)
@@ -99,8 +99,8 @@ while robot.step() != -1:
         else:
             # If we predict a straight path, take your time to correct it
             control = control * 0.8
+        control = 0.9 * control + 0.1 * prev_control
 
-    control = 0.9 * control + 0.1 * prev_control
     control = np.clip(control, -0.6, 0.6)
 
     if type(control) == tuple:
