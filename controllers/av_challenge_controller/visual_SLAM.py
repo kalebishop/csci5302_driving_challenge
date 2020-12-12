@@ -71,10 +71,11 @@ class fastSLAM:
         self.axle_length = 2.875  # in meters; needed for motion model
         # milliseconds between updates to the world in simulation
         self.worldinfo_basic_timestep = 10
+        self.course_map_file = map_ + "_map.p"
 
         if map_ is not None:
             try:
-                with open(map_ + "_map.p", "rb") as f:
+                with open(self.course_map_file, "rb") as f:
                     Xs, Ys, best_landmarks = pickle.load(f)
 
                 self.particles[0].landmarks = best_landmarks
@@ -466,8 +467,8 @@ class fastSLAM:
         if self.past_start and 1 < best_particle.mu[0] < 10 and -10 < best_particle.mu[1] < 10:
             print("Finished lap!")
             if self.lap_num == 0:
-                traj_file = "trajectory.p"
-                with open(traj_file, mode='wb') as f:
+                # traj_file = "trajectory.p"
+                with open(self.course_map_file, mode='wb') as f:
                     pickle.dump((self.Xs, self.Ys, best_particle.landmarks), f)
 
             self.map_Xs = deepcopy(self.Xs)
