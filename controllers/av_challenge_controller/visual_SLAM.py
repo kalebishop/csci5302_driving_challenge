@@ -301,6 +301,7 @@ class fastSLAM:
 
         lookahead_distance = int(10 * self.avg_indx_update) if self.avg_indx_update > 0 else 40
 
+        # Find the closest point on the map (Within the next 20 points)
         for i in range(0, 20, 1):
             ci = (self.curr_index + i) % len(self.map_Xs)
             dist = np.linalg.norm(self.best_particle.mu[:2] - np.array([self.map_Xs[ci], self.map_Ys[ci]]))
@@ -311,9 +312,7 @@ class fastSLAM:
                 break
             prev_distance = dist
 
-        # self.map_mu = np.array([self.map_Xs[closest_point_idx], self.map_Ys[closest_point_idx]])
-
-        # update the average update every ten steps by taking an average over the last 10 steps
+        # update the average update every 20 steps by taking an average over the last 20 steps
         if len(self.Xs) % 20 == 0:
             self.avg_indx_update = (closest_point_idx - self.ten_ago_idx) / 10.
             self.ten_ago_idx = closest_point_idx
@@ -322,9 +321,7 @@ class fastSLAM:
 
         ci = closest_point_idx
 
-        # lookahead_distance = 20 * self.avg_indx_update
-
-        pi_, ni = ci, ci + int(lookahead_distance)# * 1.25)
+        pi_, ni = ci, (ci + int(lookahead_distance) % len(self.map_Xs))# * 1.25)
 
         direction_str = []
         self.directions = []
@@ -334,11 +331,10 @@ class fastSLAM:
             p.mu[0] = self.map_Xs[ci] * 0.1 + p.mu[0] * 0.9
             p.mu[1] = self.map_Ys[ci] * 0.1 + p.mu[1] * 0.9
 
-            # if len(self.Xs) % 100 == 0:
-            #     print("angle DIFF: ", prev_angle, p.mu[2])
-
         prev_angle = self.wrap_angle(prev_angle)
 
+        # Essentially look ahead in chunks . For each chunk, calculate the angle change between them to see
+        # if the it is a left/right/no turn between the previous position and the next position
         for i in range(int(lookahead_distance), int(lookahead_distance * 10) + 2, lookahead_distance):
             pi_, ni = (ci + i) % len(self.map_Xs), (ci + i + lookahead_distance) % len(self.map_Xs)
             current_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
@@ -361,46 +357,11 @@ class fastSLAM:
 
         self.turn_coming_up = abs(np.mean(self.directions[:2])) > (pi / 16)
         self.straighten_out = abs(np.mean(self.directions[2:])) < (pi / 32)
-        #
+
         if len(self.Xs) % 100 == 0:
             print(f"Current location: {self.best_particle.mu}, closest location: {self.map_Xs[ci], self.map_Ys[ci]}")
-            print("UPDATE distance:", self.avg_indx_update, speed, lookahead_distance)
+            # print("UPDATE distance:", self.avg_indx_update, speed, lookahead_distance)
             print(direction_str)
-            # if self.turn_coming_up:
-            #     print("TURN IS COMING UP")
-
-
-
-
-        # PROPORTIONAL COMPONENT
-        # TARGET_OFFSET = 10
-        # ci = closest_point_idx
-        # ti = (closest_point_idx + TARGET_OFFSET) % len(self.map_Xs)
-        # P_error = self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2])
-        #
-        # # INTEGRAL COMPONENT
-        # I_error = 0
-        # for i in range(int(TARGET_OFFSET / 2), TARGET_OFFSET):
-        #     ti = (ci + i) % len(self.map_Xs)
-        #     I_error += self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2])
-        #
-        # I_error /= (TARGET_OFFSET / 2)
-        #
-        # self.curr_index = ci
-        #
-        # if len(self.Xs) % 25 == 0:
-        #     print(f"curr point {(cx, cy)}, target_point: {(self.map_Xs[ti], self.map_Ys[ti])} p error: {P_error}, i error: {I_error}")
-        #
-        # self.error = min(0.99, 0.5 * P_error + 0.5 * I_error) * 0.5
-        #
-        # # Check for turn in the next ~3 seconds
-        # ti = (ci + 500) % len(self.map_Xs)
-        # self.turn_coming_up = self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2]) > pi / 16
-        #
-        # if len(self.Xs) % 5 == 0:
-        #     print(f"curr point {(cx, cy)}, diffs and angle: {(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx)}: {np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx)}")
-        #     if self.turn_coming_up:
-        #         print("TURN IS COMING UP")
 
     def update_particle_and_landmarks(self, p, js):
         new_weight = []
@@ -483,7 +444,7 @@ class fastSLAM:
                 correction_theta = np.random.normal(0, np.deg2rad(1))
                 if abs(p.mu[2]) > abs(correction_theta):
                     p.mu[2] = correction_theta
-                p.mu[:2 ] = np.random.normal(0, 1, size=2)
+                p.mu[:2 ] = np.random.normal(0, 0.1, size=2)
 
 
             fig = plt.figure()
