@@ -43,32 +43,28 @@ class TeslaBot(Driver):
 
 
 robot = TeslaBot()
-fSLAM = fastSLAM()
-# supervisor = Supervisor()
+# @BRAD @AAQUIB change map name to anything else (or None) for new map
+MAP_NAME = "main_course"
+fSLAM = fastSLAM(map_=MAP_NAME)
 
-# lidar_width = lidar.getHorizontalResolution()
-# lidar_max_range = lidar.getMaxRange()
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
 line_follower = PIDLineFollower()
-
-# midpoint of y dimension from camera
 midpoint_y = robot.front_camera.getWidth() / 2.0
-# print(robot.getCurrentPosition())
 
-mapping_min_max_speed = (6, 30)
-regular_min_max_speed = (10, 50)
+mapping_min_max_speed = (6, 40)
+regular_min_max_speed = (15, 60)
 
-robot.setCruisingSpeed(40)
+robot.setCruisingSpeed(80)
 
 count = 0
-angle_error = 0
+angle_error, control, curr_speed = 0, 0, 0
 
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
+
+    prev_control = control
     count += 1
-    if count % 100 == 0:
-        print(f"Step count: {count}")
 
     min_s, max_s = mapping_min_max_speed if fSLAM.lap_num < 1 else regular_min_max_speed
 
@@ -82,9 +78,43 @@ while robot.step() != -1:
         # find the error from the road line
         error = sum(road_line_points) / float(len(road_line_points)) - midpoint_y
         angle_error = robot.calculate_front_offset(error)
-        control = line_follower.get_control(angle_error)
 
-    target_speed = max(max_s * (1 - abs(control) * 5),  min_s)
+        curr_speed = robot.getCurrentSpeed()
+        curr_speed = curr_speed if not math.isnan(curr_speed) else 0
+        curr_angle = robot.getSteeringAngle()
+        curr_angle = curr_angle if not math.isnan(curr_angle) else 0
+        x, y , theta = fSLAM.best_particle.mu
+
+        control = 1.0 * line_follower.get_control(angle_error, x, y, theta, curr_speed, curr_angle)
+
+    if fSLAM.lap_num > 0:
+        fSLAM.update_window(curr_speed)
+        # turn if turn is coming up
+        if not (-(math.pi / 90) < fSLAM.directions[0] < (math.pi / 90)):
+            control = control * 0.6 + fSLAM.directions[0] * 0.6 + fSLAM.directions[1] * 0.4 + fSLAM.directions[2] * 0.3
+        # turn in opposite direction before turn:
+        elif not (-(math.pi / 90) < np.mean(fSLAM.directions[2:]) < (math.pi / 90)):
+            control = control * 1 - np.sign(np.mean(fSLAM.directions[2:])) * math.pi / 256.
+        else:
+            # If we predict a straight path, take your time to correct it
+            control = control * 0.8
+
+    control = np.clip(control, -0.6, 0.6)
+
+    if type(control) == tuple:
+        target_speed = control[0]
+        control = control[1]
+    else:
+        target_speed = max_s * (1 - abs(control) * 5)
+        target_speed *= 0.4 if fSLAM.turn_coming_up else 1
+        target_speed *= 2 if fSLAM.turn_coming_up and fSLAM.straighten_out else 1
+        target_speed = max(target_speed,  min_s)
+
+    # clip target angle to a 10% change from last iteration
+    # c_ = control
+    # control = np.clip(control, prev_control * 0.8, prev_control * 1.2)
+    # control = control + c_ * 0.1
+
     # if abs(control) > 0.2:
         # brake and reduce speed when turning
     robot.setBrakeIntensity(max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
@@ -112,22 +142,6 @@ while robot.step() != -1:
             continue
         if b'twoer' in obj_model: # I have no idea what twoer is, but it shows up quite a bit???
             continue
-        # if b'building' in obj_model: # ???
-        #     continue
-        # id = obj.get_id()
-        # pos = obj.get_position()
-        # ori = obj.get_orientation()
-        # size = obj.get_size()
-        # pos_on_img = obj.get_position_on_image()
-        # size_on_img = obj.get_size_on_image()
-        # nc = obj.get_number_of_colors()
-        # cs = obj.get_colors()
-        # model = obj.get_model()
-        # #
-        # print(f"id: {id}, pos: {pos}, ori: {ori}, size: {size}\n"
-        #       f"pos_on_img: {pos_on_img}, size_on_img: {size_on_img}\n"
-        #       f"num_colours: {nc}, colours: {cs}\n"
-        #       f"model: {model}")
         visual_landmarks.append((obj.get_id(), obj.get_position()))
 
     for obj in visual_landmarks_rear:
@@ -157,7 +171,6 @@ while robot.step() != -1:
 
     if count % 25 == 0:
         print(f"number of landmarks: {len(visual_landmarks)}")
-
 
     curr_speed = robot.getCurrentSpeed()
     curr_speed = curr_speed if not math.isnan(curr_speed) else 0

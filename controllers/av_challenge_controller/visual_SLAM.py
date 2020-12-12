@@ -39,19 +39,27 @@ class fastSLAM:
     States, x or xt in code, are represented as a tuple (x, y, theta)
     """
 
-    def __init__(self):
-        self.N = 30  # max number of particles
+    def __init__(self, map_=None):
+        self.N = 5  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.8
         self.Xs = []
         self.Ys = []
         self.particles = [Particle()]
-        self.resample_particles()
+        self.best_particle = self.particles[0]
         self.lap_num = 0
         self.curr_index = 0
         self.angle_error = 0
         self.past_start = False
+        self.mu = np.zeros(3)
+        self.turn_coming_up = False
+        self.error = 0
+        self.directions = [0,0,0,0]
+        self.turn_coming_up = False
+        self.straighten_out = False
+        self.ten_ago_idx = 0
+        self.avg_indx_update = 0
 
         # Initialize measurement covariance
         # TODO tune
@@ -63,6 +71,26 @@ class fastSLAM:
         self.axle_length = 2.875  # in meters; needed for motion model
         # milliseconds between updates to the world in simulation
         self.worldinfo_basic_timestep = 10
+
+        if map_ is not None:
+            try:
+                with open(map_ + "_map.p", "rb") as f:
+                    Xs, Ys, best_landmarks = pickle.load(f)
+
+                self.particles[0].landmarks = best_landmarks
+                self.map_Xs = deepcopy(Xs)
+                self.map_Ys = deepcopy(Ys)
+                self.Xs = deepcopy(Xs)
+                self.Ys = deepcopy(Ys)
+                self.curr_index = 0
+                self.lap_num += 1
+                print(f"Loaded map from: {map_ + '_map.p'}!")
+
+            except FileNotFoundError:
+                pass
+
+        self.resample_particles()
+
 
     def motion_model(self, x, u):
         """
@@ -257,13 +285,22 @@ class fastSLAM:
         assert len(new_particles) == self.N
         self.particles = new_particles
 
+    def wrap_angle(self, angle):
+        """
+        Wrap angle to [-pi, pi]
+        :param angle: angle in radians
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
 
-    def update_window(self, best_particle):
+    def update_window(self, speed):
         shortest_dist, closest_point_idx = float('inf'), None
         prev_distance = float('inf')
-        for i in range(20):
-            ci = self.curr_index + i
-            dist = np.linalg.norm(best_particle.mu[:2] - np.array([self.Xs[ci], self.Ys[ci]]))
+
+        lookahead_distance = int(20 * self.avg_indx_update) if self.avg_indx_update > 0 else 40
+
+        for i in range(0, lookahead_distance * 2, 1):
+            ci = (self.curr_index + i) % len(self.map_Xs)
+            dist = np.linalg.norm(self.best_particle.mu[:2] - np.array([self.map_Xs[ci], self.map_Ys[ci]]))
             if dist < shortest_dist:
                 shortest_dist = dist
                 closest_point_idx = ci
@@ -271,27 +308,82 @@ class fastSLAM:
                 break
             prev_distance = dist
 
+        # update the average update every ten steps by taking an average over the last 10 steps
+        if len(self.Xs) % 10 == 0:
+            self.avg_indx_update = (closest_point_idx - self.ten_ago_idx) / 10.
+            self.ten_ago_idx = closest_point_idx
+
+        self.curr_index = closest_point_idx
+
+        ci = closest_point_idx
+
+        # lookahead_distance = 20 * self.avg_indx_update
+
+        pi_, ni = ci, ci + int(lookahead_distance)# * 1.25)
+
+        direction_str = []
+        self.directions = []
+        prev_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
+        for i in range(int(lookahead_distance), int(lookahead_distance * 6) + 2, lookahead_distance):
+            pi_, ni = ci + i, ci + i + lookahead_distance
+            current_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
+            angle_diff = self.wrap_angle(current_angle - prev_angle)
+            if abs(angle_diff) > pi / 3:
+                print(f"curent angle: {current_angle}, prev angle: {prev_angle}")
+                print((self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
+            if angle_diff > pi / 64:
+                direction_str.append(f"right:{angle_diff:.2f}")
+                self.directions.append(angle_diff)
+            elif angle_diff < -pi / 64:
+                direction_str.append(f"left:{angle_diff:.2f}")
+                self.directions.append(angle_diff)
+            else:
+                direction_str.append(f"straight:{angle_diff:.2f}")
+                self.directions.append(angle_diff)
+            prev_angle = current_angle
+
+        self.turn_coming_up = abs(np.mean(self.directions[:2])) > (pi / 16)
+        self.straighten_out = abs(np.mean(self.directions[2:])) < (pi / 32)
+        #
+        if len(self.Xs) % 100 == 0:
+            print(f"Current location: {self.best_particle.mu}, closest location: {self.map_Xs[ci], self.map_Ys[ci]}")
+            print("UPDATE distance:", self.avg_indx_update, speed, lookahead_distance)
+            print(direction_str)
+            # if self.turn_coming_up:
+            #     print("TURN IS COMING UP")
+
+
+
 
         # PROPORTIONAL COMPONENT
-        TARGET_OFFSET = 25
-        ci = closest_point_idx
-        ti = closest_point_idx + TARGET_OFFSET
-        P_error = np.arctan2(self.Ys[ti] - self.Ys[ci], self.Xs[ti] - self.Xs[ci])
-
-        # INTEGRAL COMPONENT
-        I_error = 0
-        for i in range(TARGET_OFFSET):
-            I_error += np.arctan2(self.Ys[ci + i] - self.Ys[ci], self.Xs[ci + i] - self.Xs[ci])
-
-        I_error /= TARGET_OFFSET
-
-        self.curr_index = ci
-
-        if len(self.Xs) % 25 == 0:
-            print(f"curr point {(self.Xs[ci], self.Ys[ci])}, target_point: {(self.Xs[ti], self.Ys[ti])} p error: {P_error}, i error: {I_error}")
-
-        self.error = min(0.99, 0.5 * P_error + 0.5 * I_error)
-
+        # TARGET_OFFSET = 10
+        # ci = closest_point_idx
+        # ti = (closest_point_idx + TARGET_OFFSET) % len(self.map_Xs)
+        # P_error = self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2])
+        #
+        # # INTEGRAL COMPONENT
+        # I_error = 0
+        # for i in range(int(TARGET_OFFSET / 2), TARGET_OFFSET):
+        #     ti = (ci + i) % len(self.map_Xs)
+        #     I_error += self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2])
+        #
+        # I_error /= (TARGET_OFFSET / 2)
+        #
+        # self.curr_index = ci
+        #
+        # if len(self.Xs) % 25 == 0:
+        #     print(f"curr point {(cx, cy)}, target_point: {(self.map_Xs[ti], self.map_Ys[ti])} p error: {P_error}, i error: {I_error}")
+        #
+        # self.error = min(0.99, 0.5 * P_error + 0.5 * I_error) * 0.5
+        #
+        # # Check for turn in the next ~3 seconds
+        # ti = (ci + 500) % len(self.map_Xs)
+        # self.turn_coming_up = self.wrap_angle(np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx) + best_particle.mu[2]) > pi / 16
+        #
+        # if len(self.Xs) % 5 == 0:
+        #     print(f"curr point {(cx, cy)}, diffs and angle: {(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx)}: {np.arctan2(self.map_Ys[ti] - cy, self.map_Xs[ti] - cx)}")
+        #     if self.turn_coming_up:
+        #         print("TURN IS COMING UP")
 
     def update_particle_and_landmarks(self, p, js):
         new_weight = []
@@ -360,6 +452,10 @@ class fastSLAM:
                 with open(traj_file, mode='wb') as f:
                     pickle.dump((self.Xs, self.Ys, best_particle.landmarks), f)
 
+            self.map_Xs = deepcopy(self.Xs)
+            self.map_Ys = deepcopy(self.Ys)
+            self.curr_index = 0
+
             self.lap_num += 1
             self.past_start = False
             for p in self.particles:
@@ -382,8 +478,10 @@ class fastSLAM:
             plt.close(fig)
             # plt.show()
 
-        if self.lap_num > 0:
-            self.update_window(best_particle)
+        # if self.lap_num > 0:
+        #     self.update_window(best_particle)
+
+        self.best_particle = best_particle
 
 
 
