@@ -17,6 +17,7 @@ from image_filtering import Detector
 from simple_controller import PIDLineFollower
 
 PARALLEL_PARKING = False
+USE_RRT = False
 
 # create the Robot instance.
 # See Webots Driver documentation: https://www.cyberbotics.com/doc/automobile/driver-library?tab-language=python
@@ -72,15 +73,18 @@ angle_error = 0
 
 
 vehicle_data = {}
-# get actions by calling
-# rrt = RRT()
-# node_list = rrt.generate_graph()
-# actions = rrt.get_actions(node_list)
-# print(actions)
-# actions = []
-park_controller = AckermannParker()
-# c1, c2, _, start_pt, trans_pt = park_controller.calculate_trajectory()
-# print(start_pt, trans_pt)
+
+if PARALLEL_PARKING:
+    if USE_RRT:
+        # get actions by calling
+        rrt = RRT()
+        node_list = rrt.generate_graph()
+        actions = rrt.get_actions(node_list)
+        print(actions)
+        steps = 100
+    else:
+        park_controller = AckermannParker()
+
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
@@ -116,22 +120,24 @@ while robot.step() != -1:
     # # print("steering angle: %f" % control)
     # robot.setSteeringAngle(control)
 
-
-    # # parallel parking
-    # # each action from rrt is run for 40
-    # if count < len(actions) * steps:
-    #     speed, steering = actions[int(count//steps)]
-    # else:
-    #     speed = 0
-    #     steering = 0
-    s, phi = park_controller.parallel_park()
-    if count % 100 == 0:
-        print(s, phi)
-        print(park_controller.cur_state)
-    robot.setCruisingSpeed(s)
-    robot.setSteeringAngle(phi)
-    park_controller.update_pos((s, phi))
-
+    if PARALLEL_PARKING:
+        if USE_RRT:
+            if count < len(actions) * steps:
+                speed, steering = actions[int(count//steps)]
+                print(speed, steering)
+            else:
+                speed = 0
+                steering = 0
+            robot.setCruisingSpeed(-speed)
+            robot.setSteeringAngle(steering)
+        else:
+            s, phi = park_controller.parallel_park()
+            if count % 100 == 0:
+                print(s, phi)
+                print(park_controller.cur_state)
+            robot.setCruisingSpeed(s)
+            robot.setSteeringAngle(phi)
+            park_controller.update_pos((s, phi))
 
     # visual_landmarks = []
     # side_pieces = []
