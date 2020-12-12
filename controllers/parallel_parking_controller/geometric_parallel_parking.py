@@ -14,7 +14,7 @@ class Obstacle:
         return [[x-half_x, y-half_y], [x-half_x, y+half_y], [x+half_x, y+half_y], [x+half_x, y-half_y]]
 
 class AckermannParker:
-    def __init__(self, align_obs=None):
+    def __init__(self, align_obj):
         self.wheelbase = 2.875
         self.length = 4.69
         self.overh = self.length - self.wheelbase / 2
@@ -30,9 +30,11 @@ class AckermannParker:
         #     Obstacle([80, 134], 2, 5)
         # ]
 
-        self.goal1 = np.array([83, 161])
-        self.goal2 = np.array([80, 153])
-        self.start = np.array([87, 138])
+        # self.goal1 = np.array([83, 161])
+        # self.goal2 = np.array([80, 153])
+        self.start = np.array([0, 0])
+        self.goal1 = align_obj + np.array([3.0, 1.])
+        self.goal2 = align_obj - np.array([0., 6.5])
         self.cur_state = np.array([self.start[0], self.start[1], np.pi / 2])
         self.goal_reached = False
 
@@ -169,4 +171,3 @@ class AckermannParker:
 
 if __name__ == "__main__":
     parker = AckermannParker()
-    parker.calculate_trajectory()
