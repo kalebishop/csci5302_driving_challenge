@@ -51,13 +51,10 @@ tele = AVTelemetry(robot)
 
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
 line_follower = PIDLineFollower()
-
-# midpoint of y dimension from camera
 midpoint_y = robot.front_camera.getWidth() / 2.0
-# print(robot.getCurrentPosition())
 
-mapping_min_max_speed = (6, 30)
-regular_min_max_speed = (10, 50)
+mapping_min_max_speed = (5, 30)
+regular_min_max_speed = (12, 60)
 
 robot.setCruisingSpeed(70)
 
@@ -99,16 +96,18 @@ while robot.step() != -1:
         control = 1.0 * line_follower.get_control(angle_error, x, y, theta, curr_speed, curr_angle)
 
     if fSLAM.lap_num > 0:
+        # Update fSLAM future directions (i.e. are we turning left right or going straight in the next x steps)
         fSLAM.update_window(curr_speed)
         # turn if turn is coming up
-        if not (-(math.pi / 90) < fSLAM.directions[0] < (math.pi / 90)):
-            control = control * 0.6 + fSLAM.directions[0] * 0.6 + fSLAM.directions[1] * 0.4 + fSLAM.directions[2] * 0.3
-        # turn in opposite direction before turn:
-        elif not (-(math.pi / 90) < np.mean(fSLAM.directions[2:]) < (math.pi / 90)):
-            control = control * 1 - np.sign(np.mean(fSLAM.directions[2:])) * math.pi / 256.
+        if not (-(math.pi / 128) < fSLAM.directions[0] < (math.pi / 128)):
+            control = control * 0.6 + fSLAM.directions[0] * 0.8 + fSLAM.directions[1] * 0.4 + fSLAM.directions[2] * 0.3
+        # turn in opposite direction before turn to give larger turn radius
+        elif not (-(math.pi / 128) < np.mean(fSLAM.directions[2:]) < (math.pi / 128)):
+            control = control * 0.9 - np.sign(np.mean(fSLAM.directions[2:])) * math.pi / 256.
         else:
             # If we predict a straight path, take your time to correct it
             control = control * 0.8
+        control = 0.9 * control + 0.1 * prev_control
 
     control = np.clip(control, -0.6, 0.6)
 
@@ -117,17 +116,13 @@ while robot.step() != -1:
         control = control[1]
     else:
         target_speed = max_s * (1 - abs(control) * 5)
+        # Reduce speed if turning
         target_speed *= 0.4 if fSLAM.turn_coming_up else 1
+        # Increase speed slightly if we're straightening out soon
         target_speed *= 2 if fSLAM.turn_coming_up and fSLAM.straighten_out else 1
         target_speed = max(target_speed,  min_s)
 
-    # clip target angle to a 10% change from last iteration
-    # c_ = control
-    # control = np.clip(control, prev_control * 0.8, prev_control * 1.2)
-    # control = control + c_ * 0.1
-
-    # if abs(control) > 0.2:
-        # brake and reduce speed when turning
+    # brake and reduce speed when turning
     robot.setBrakeIntensity(max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
 
     # print(target_speed, control, max( (robot.getCurrentSpeed() - target_speed) / robot.getCurrentSpeed(), 0))
