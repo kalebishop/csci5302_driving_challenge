@@ -53,7 +53,7 @@ road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]
 line_follower = PIDLineFollower()
 midpoint_y = robot.front_camera.getWidth() / 2.0
 
-mapping_min_max_speed = (5, 30)
+mapping_min_max_speed = (6, 30)
 regular_min_max_speed = (12, 60)
 
 robot.setCruisingSpeed(70)

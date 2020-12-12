@@ -865,7 +865,6 @@ TeslaModel3 {
       name "rear_camera"
       fieldOfView 1
       width 128
-      # CHEATING
       recognition Recognition {
        frameThickness 0
        maxObjects 100

@@ -65,7 +65,7 @@ class fastSLAM:
         # TODO tune
         self.us_sigma = 0.01
         self.ua_sigma = 0.1
-        self.Q = np.array([[0.8, 0],
+        self.Q = np.array([[1.0, 0],
                            [0, np.deg2rad(5.0)]])
 
         self.axle_length = 2.875  # in meters; needed for motion model
@@ -340,7 +340,7 @@ class fastSLAM:
             current_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
             angle_diff = self.wrap_angle(current_angle - prev_angle)
 
-            angle_diff = np.clip(angle_diff, -0.15, 0.15)
+            angle_diff = np.clip(angle_diff, -0.16, 0.16)
             if abs(angle_diff) > pi / 3:
                 print(f"curent angle: {current_angle}, prev angle: {prev_angle}")
                 print((self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))

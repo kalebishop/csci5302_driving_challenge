@@ -1,9 +1,9 @@
 from math import *
 import numpy as np
 
-PROPORTIONAL_GAIN = 0.8
-INTEGRAL_GAIN = 0.4
-DERIVATIVE_GAIN = 0.2
+PROPORTIONAL_GAIN = 1.0
+INTEGRAL_GAIN = 0.5
+# DERIVATIVE_GAIN = 0.2
 
 
 class PIDLineFollower:
@@ -40,10 +40,6 @@ class PIDLineFollower:
         :return: steering angle in radians (positive turns right, negative turns
         left)
         """
-        # if x > 50:
-        #     self.enter_powerslide(x, y, theta, speed, turn_angle)
-        # if self.in_powerslide:
-        #     return self.get_powerslide_control(x, y, theta, speed, turn_angle)
         derivative_error = sum([self.prev_errors[i] - self.prev_errors[i-1] for i in range(1, len(self.prev_errors))])
 
         control = (PROPORTIONAL_GAIN * angle_error) \
@@ -52,38 +48,3 @@ class PIDLineFollower:
 
         self.prev_errors = [angle_error] + self.prev_errors[:24]
         return control
-
-    def enter_powerslide(self, x, y, theta, speed, turn_angle):
-        self.entrance_angle = theta
-        self.midpoint_angle = (theta + pi / 2) % (2*pi)
-        self.exit_angle = (theta + pi) % (2*pi)
-
-        self.entrance_pos = x
-        self.in_powerslide = True
-        self.stage = 0
-        assert speed > 25
-
-    def get_powerslide_control(self, x, y, theta, speed, turn_angle):
-        # Stage 1: setup -- turn hard, keep throttle consistent
-
-        print("POWERSLIDING!!!: STAGE:", self.stage)
-        theta = theta % (2 * pi)
-        if self.stage == 0:
-            if theta >= self.midpoint_angle:
-                self.stage += 1
-            else:
-                return 25, pi / 2
-
-        # Stage 2: Drift -- max throttle and counter steer to lose traction
-        if self.stage == 1:
-            if theta >= self.exit_angle:
-                self.stage += 1
-            else:
-                return 100, -pi / 2
-
-        # Stage 3: Recover -- reduce speed to regain traction and correct angle
-        if self.stage == 2:
-            if speed <= 25 and theta <= self.exit_angle and x > self.entrance_pos:
-                self.in_powerslide = False
-            else:
-                return 20, theta - self.entrance_angle
