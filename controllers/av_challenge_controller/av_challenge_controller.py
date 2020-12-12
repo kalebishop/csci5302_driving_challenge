@@ -48,14 +48,14 @@ fSLAM = fastSLAM()
 tele = AVTelemetry(robot)
 # supervisor = Supervisor()
 
-# lidar_width = robot.lidar.getHorizontalResolution()
-# lidar_max_range = robot.lidar.getMaxRange()
-
+# lidar_width = lidar.getHorizontalResolution()
+# lidar_max_range = lidar.getMaxRange()
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
 line_follower = PIDLineFollower()
 
 # midpoint of y dimension from camera
 midpoint_y = robot.front_camera.getWidth() / 2.0
+# print(robot.getCurrentPosition())
 
 mapping_min_max_speed = (6, 30)
 regular_min_max_speed = (10, 50)
@@ -64,13 +64,15 @@ robot.setCruisingSpeed(40)
 
 count = 0
 angle_error = 0
-vehicle_data = {}
 
+
+vehicle_data = {}
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
     # TESTING
     tele.display_particles(fSLAM.particles)
+    # # #
     count += 1
     if count % 100 == 0:
         print(f"Step count: {count}")
