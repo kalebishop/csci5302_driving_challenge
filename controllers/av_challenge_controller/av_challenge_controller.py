@@ -8,6 +8,7 @@ from tqdm import tqdm
 from vehicle import Driver
 import numpy as np
 from visual_SLAM import fastSLAM
+from visualize_telemetry import AVTelemetry
 
 import math
 from image_filtering import Detector
@@ -46,25 +47,35 @@ robot = TeslaBot()
 # @BRAD @AAQUIB change map name to anything else (or None) for new map
 MAP_NAME = "main_course"
 fSLAM = fastSLAM(map_=MAP_NAME)
+tele = AVTelemetry(robot)
 
 road_line_detector = Detector(np.array([0, 0, 0.65]), np.array([255.0, 1.0, 1.0]))
 line_follower = PIDLineFollower()
+
+# midpoint of y dimension from camera
 midpoint_y = robot.front_camera.getWidth() / 2.0
+# print(robot.getCurrentPosition())
 
-mapping_min_max_speed = (6, 40)
-regular_min_max_speed = (15, 60)
+mapping_min_max_speed = (6, 30)
+regular_min_max_speed = (10, 50)
 
-robot.setCruisingSpeed(80)
+robot.setCruisingSpeed(70)
 
 count = 0
 angle_error, control, curr_speed = 0, 0, 0
 
+
+vehicle_data = {}
 # Main loop:
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
-
+    # TESTING
+    tele.display_particles(fSLAM.particles)
+    # # #
     prev_control = control
     count += 1
+    if count % 100 == 0:
+        print(f"Step count: {count}")
 
     min_s, max_s = mapping_min_max_speed if fSLAM.lap_num < 1 else regular_min_max_speed
 
@@ -172,6 +183,7 @@ while robot.step() != -1:
     if count % 25 == 0:
         print(f"number of landmarks: {len(visual_landmarks)}")
 
+
     curr_speed = robot.getCurrentSpeed()
     curr_speed = curr_speed if not math.isnan(curr_speed) else 0
     curr_angle = robot.getSteeringAngle()
@@ -179,5 +191,10 @@ while robot.step() != -1:
 
     action = (curr_speed, curr_angle)
     fSLAM.next_state(visual_landmarks, action)
+
+    vehicle_data["speed"] =  str(curr_speed)
+    vehicle_data["steer angle"] = str(curr_angle)
+
+    tele.display_statistics(vehicle_data)
 
 # Enter here exit cleanup code.

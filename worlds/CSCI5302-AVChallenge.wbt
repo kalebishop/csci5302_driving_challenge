@@ -911,5 +911,10 @@ TeslaModel3 {
     }
     GPS {
     }
+    DEF CAMERA Display {
+      name "tele_display"
+      width 256
+      height 256
+    }
   ]
 }
