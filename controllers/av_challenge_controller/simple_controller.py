@@ -1,14 +1,14 @@
 from math import *
 import numpy as np
 
-PROPORTIONAL_GAIN = 1
-INTEGRAL_GAIN = 0.5
-DERIVATIVE_GAIN = 0.00
+PROPORTIONAL_GAIN = 0.8
+INTEGRAL_GAIN = 0.4
+DERIVATIVE_GAIN = 0.2
 
 
 class PIDLineFollower:
     def __init__(self):
-        self.prev_errors = [0,0,0,0,0]
+        self.prev_errors = [0 for _ in range(25)]
 
         self.in_powerslide = False
         self.entrance_angle = None
@@ -34,16 +34,23 @@ class PIDLineFollower:
                     points.append(coord[3])
         return points
 
-    def get_control(self, angle_error):
+    def get_control(self, angle_error, x, y, theta, speed, turn_angle):
         """Returns steering angle given the angle offset in radians from center
         :param angle_error: angle in radians
         :return: steering angle in radians (positive turns right, negative turns
         left)
         """
+        # if x > 50:
+        #     self.enter_powerslide(x, y, theta, speed, turn_angle)
+        # if self.in_powerslide:
+        #     return self.get_powerslide_control(x, y, theta, speed, turn_angle)
+        derivative_error = sum([self.prev_errors[i] - self.prev_errors[i-1] for i in range(1, len(self.prev_errors))])
+
         control = (PROPORTIONAL_GAIN * angle_error) \
-                + (DERIVATIVE_GAIN * (angle_error - np.mean(self.prev_errors))) \
                 + (INTEGRAL_GAIN * np.mean(self.prev_errors))
-        self.prev_errors = [angle_error] + self.prev_errors[:4]
+        # + (DERIVATIVE_GAIN * derivative_error) \
+
+        self.prev_errors = [angle_error] + self.prev_errors[:24]
         return control
 
     def enter_powerslide(self, x, y, theta, speed, turn_angle):
@@ -58,6 +65,8 @@ class PIDLineFollower:
 
     def get_powerslide_control(self, x, y, theta, speed, turn_angle):
         # Stage 1: setup -- turn hard, keep throttle consistent
+
+        print("POWERSLIDING!!!: STAGE:", self.stage)
         theta = theta % (2 * pi)
         if self.stage == 0:
             if theta >= self.midpoint_angle:

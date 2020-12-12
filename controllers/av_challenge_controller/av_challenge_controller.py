@@ -57,6 +57,7 @@ regular_min_max_speed = (12, 60)
 
 robot.setCruisingSpeed(80)
 
+# tele = AVTelemetry()
 count = 0
 vehicle_data = {}
 angle_error, control, curr_speed = 0, 0, 0
@@ -65,7 +66,7 @@ angle_error, control, curr_speed = 0, 0, 0
 # - perform simulation steps until Webots is stopping the controller
 while robot.step() != -1:
     # TESTING
-    tele.display_particles(fSLAM.particles)
+    # tele.display_particles(fSLAM.particles)
 
     prev_control = control
     count += 1
@@ -185,6 +186,6 @@ while robot.step() != -1:
     vehicle_data["speed"] =  str(curr_speed)
     vehicle_data["steer angle"] = str(curr_angle)
 
-    tele.display_statistics(vehicle_data)
+    # tele.display_statistics(vehicle_data)
 
 # Enter here exit cleanup code.
