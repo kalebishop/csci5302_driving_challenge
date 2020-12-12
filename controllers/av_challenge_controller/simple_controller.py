@@ -1,8 +1,8 @@
 from math import *
 import numpy as np
 
-PROPORTIONAL_GAIN = 0.6
-INTEGRAL_GAIN = 0.6
+PROPORTIONAL_GAIN = 0.8
+INTEGRAL_GAIN = 0.4
 DERIVATIVE_GAIN = 0.2
 
 

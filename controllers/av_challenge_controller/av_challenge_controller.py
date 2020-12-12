@@ -52,7 +52,7 @@ line_follower = PIDLineFollower()
 midpoint_y = robot.front_camera.getWidth() / 2.0
 
 mapping_min_max_speed = (6, 40)
-regular_min_max_speed = (15, 60)
+regular_min_max_speed = (12, 60)
 
 robot.setCruisingSpeed(80)
 
@@ -90,15 +90,16 @@ while robot.step() != -1:
     if fSLAM.lap_num > 0:
         fSLAM.update_window(curr_speed)
         # turn if turn is coming up
-        if not (-(math.pi / 90) < fSLAM.directions[0] < (math.pi / 90)):
-            control = control * 0.6 + fSLAM.directions[0] * 0.6 + fSLAM.directions[1] * 0.4 + fSLAM.directions[2] * 0.3
+        if not (-(math.pi / 128) < fSLAM.directions[0] < (math.pi / 128)):
+            control = control * 0.6 + fSLAM.directions[0] * 0.8 + fSLAM.directions[1] * 0.4 + fSLAM.directions[2] * 0.3
         # turn in opposite direction before turn:
-        elif not (-(math.pi / 90) < np.mean(fSLAM.directions[2:]) < (math.pi / 90)):
-            control = control * 1 - np.sign(np.mean(fSLAM.directions[2:])) * math.pi / 256.
+        elif not (-(math.pi / 128) < np.mean(fSLAM.directions[2:]) < (math.pi / 128)):
+            control = control * 0.8 - np.sign(np.mean(fSLAM.directions[2:])) * math.pi / 256.
         else:
             # If we predict a straight path, take your time to correct it
             control = control * 0.8
 
+    control = 0.9 * control + 0.1 * prev_control
     control = np.clip(control, -0.6, 0.6)
 
     if type(control) == tuple:

@@ -40,7 +40,7 @@ class fastSLAM:
     """
 
     def __init__(self, map_=None):
-        self.N = 5  # max number of particles
+        self.N = 25  # max number of particles
         self.new_pos_sigma = 0.1  # TODO adjust
         self.new_theta_sigma = 1e-3
         self.new_landmark_weight = 0.8
@@ -84,6 +84,8 @@ class fastSLAM:
                 self.Ys = deepcopy(Ys)
                 self.curr_index = 0
                 self.lap_num += 1
+                # self.us_sigma = 0.02
+                # self.ua_sigma = 0.2
                 print(f"Loaded map from: {map_ + '_map.p'}!")
 
             except FileNotFoundError:
@@ -296,9 +298,9 @@ class fastSLAM:
         shortest_dist, closest_point_idx = float('inf'), None
         prev_distance = float('inf')
 
-        lookahead_distance = int(20 * self.avg_indx_update) if self.avg_indx_update > 0 else 40
+        lookahead_distance = int(10 * self.avg_indx_update) if self.avg_indx_update > 0 else 40
 
-        for i in range(0, lookahead_distance * 2, 1):
+        for i in range(0, 20, 1):
             ci = (self.curr_index + i) % len(self.map_Xs)
             dist = np.linalg.norm(self.best_particle.mu[:2] - np.array([self.map_Xs[ci], self.map_Ys[ci]]))
             if dist < shortest_dist:
@@ -308,8 +310,10 @@ class fastSLAM:
                 break
             prev_distance = dist
 
+        # self.map_mu = np.array([self.map_Xs[closest_point_idx], self.map_Ys[closest_point_idx]])
+
         # update the average update every ten steps by taking an average over the last 10 steps
-        if len(self.Xs) % 10 == 0:
+        if len(self.Xs) % 20 == 0:
             self.avg_indx_update = (closest_point_idx - self.ten_ago_idx) / 10.
             self.ten_ago_idx = closest_point_idx
 
@@ -323,11 +327,23 @@ class fastSLAM:
 
         direction_str = []
         self.directions = []
-        prev_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
-        for i in range(int(lookahead_distance), int(lookahead_distance * 6) + 2, lookahead_distance):
-            pi_, ni = ci + i, ci + i + lookahead_distance
+        prev_angle = np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_])
+
+        for p in self.particles:
+            p.mu[0] = self.map_Xs[ci] * 0.1 + p.mu[0] * 0.9
+            p.mu[1] = self.map_Ys[ci] * 0.1 + p.mu[1] * 0.9
+
+            # if len(self.Xs) % 100 == 0:
+            #     print("angle DIFF: ", prev_angle, p.mu[2])
+
+        prev_angle = self.wrap_angle(prev_angle)
+
+        for i in range(int(lookahead_distance), int(lookahead_distance * 10) + 2, lookahead_distance):
+            pi_, ni = (ci + i) % len(self.map_Xs), (ci + i + lookahead_distance) % len(self.map_Xs)
             current_angle = self.wrap_angle(np.arctan2(self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
             angle_diff = self.wrap_angle(current_angle - prev_angle)
+
+            angle_diff = np.clip(angle_diff, -0.15, 0.15)
             if abs(angle_diff) > pi / 3:
                 print(f"curent angle: {current_angle}, prev angle: {prev_angle}")
                 print((self.map_Ys[ni] - self.map_Ys[pi_], self.map_Xs[ni] - self.map_Xs[pi_]))
@@ -402,6 +418,8 @@ class fastSLAM:
 
             new_weight.append(w_j)
 
+
+
         if len(new_weight) > 0:
             new_weight = np.mean(new_weight)  # take n_th root of the product of the probabilities
             p.update_weight(new_weight)
@@ -445,7 +463,7 @@ class fastSLAM:
             self.past_start = True
 
 
-        if self.past_start and 1 < best_particle.mu[0] < 10 and -5 < best_particle.mu[1] < 5:
+        if self.past_start and 1 < best_particle.mu[0] < 10 and -10 < best_particle.mu[1] < 10:
             print("Finished lap!")
             if self.lap_num == 0:
                 traj_file = "trajectory.p"
@@ -458,10 +476,14 @@ class fastSLAM:
 
             self.lap_num += 1
             self.past_start = False
+            # self.us_sigma = 0.02
+            # self.ua_sigma = 0.2
             for p in self.particles:
                 correction_theta = np.random.normal(0, np.deg2rad(1))
                 if abs(p.mu[2]) > abs(correction_theta):
                     p.mu[2] = correction_theta
+                p.mu[:2 ] = np.random.normal(0, 1, size=2)
+
 
             fig = plt.figure()
             plt.plot(self.Xs[::10], self.Ys[::10])
