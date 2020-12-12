@@ -51,7 +51,9 @@ if USE_RRT:
     print(actions)
     steps = 100
 else:
-    park_controller = AckermannParker()
+    # park_controller = AckermannParker()
+    align_obj = 'BMW'
+    align_obj_found = False
 
 count = 0
 # Main loop:
@@ -71,10 +73,19 @@ while robot.step() != -1:
         robot.setCruisingSpeed(-speed)
         robot.setSteeringAngle(steering)
     else:
-        s, phi = park_controller.parallel_park()
-        if count % 100 == 0:
-            print(s, phi)
-            print(park_controller.cur_state)
-        robot.setCruisingSpeed(s)
-        robot.setSteeringAngle(phi)
-        park_controller.update_pos((s, phi))
+        if not align_obj_found:
+            objs = robot.front_camera.getRecognitionObjects()
+            for o in objs:
+                model = o.get_model()
+                if b'BMW' in model:
+                    pos = np.array([o.get_position()[0], -1 * o.get_position()[2]])
+                    park_controller = AckermannParker(pos)
+                    align_obj_found = True
+        else:
+            s, phi = park_controller.parallel_park()
+            if count % 100 == 0:
+                print(s, phi)
+                print(park_controller.cur_state)
+            robot.setCruisingSpeed(s)
+            robot.setSteeringAngle(phi)
+            park_controller.update_pos((s, phi))
